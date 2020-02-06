@@ -9,48 +9,6 @@ import (
 	"time"
 )
 
-func ReadCString(b []byte, maxLen int, fieldName string) (data string, l int, err error) {
-	if (maxLen < 1) || (maxLen > len(b)) {
-		maxLen = len(b)
-	}
-
-	for l = 0; l < maxLen; l++ {
-		if b[l] == 0 {
-			if l > 0 {
-				data = string(b[0:l])
-			} else {
-				data = ""
-			}
-			// Skip trailing 0x00
-			l++
-			return
-		}
-	}
-
-	// No terminator found, copy the least part of the line and raise an error
-	data = string(b[0:maxLen])
-	err = fmt.Errorf("No CString terminator for field [%s]", fieldName)
-	return
-}
-
-func (p *SMPPPacket) DecodeHDR(b []byte) error {
-	if len(b) < 16 {
-		return fmt.Errorf("Header is too short (%d, expecting 16 or mode bytes)", len(b))
-	}
-	p.Hdr.Len = binary.BigEndian.Uint32(b[0:])
-	p.Hdr.ID = binary.BigEndian.Uint32(b[4:])
-	p.Hdr.Status = binary.BigEndian.Uint32(b[8:])
-	p.Hdr.Seq = binary.BigEndian.Uint32(b[12:])
-
-	if p.Hdr.Len > MaxSMPPPacketSize {
-		return fmt.Errorf("Packet body is too large (%d, allowed only %d bytes)", p.Hdr.Len, MaxSMPPPacketSize)
-	}
-	if p.Hdr.Len < 16 {
-		return fmt.Errorf("Packet body is too short (%d)", p.Hdr.Len)
-	}
-	return nil
-}
-
 //
 // Init SMPP Session
 func (s *SMPPSession) Init() {

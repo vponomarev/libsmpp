@@ -6,8 +6,50 @@ import (
 	"libsmpp/const"
 )
 
+func ReadCString(b []byte, maxLen int, fieldName string) (data string, l int, err error) {
+	if (maxLen < 1) || (maxLen > len(b)) {
+		maxLen = len(b)
+	}
+
+	for l = 0; l < maxLen; l++ {
+		if b[l] == 0 {
+			if l > 0 {
+				data = string(b[0:l])
+			} else {
+				data = ""
+			}
+			// Skip trailing 0x00
+			l++
+			return
+		}
+	}
+
+	// No terminator found, copy the least part of the line and raise an error
+	data = string(b[0:maxLen])
+	err = fmt.Errorf("No CString terminator for field [%s]", fieldName)
+	return
+}
+
+func (p *SMPPPacket) DecodeHDR(b []byte) error {
+	if len(b) < 16 {
+		return fmt.Errorf("Header is too short (%d, expecting 16 or mode bytes)", len(b))
+	}
+	p.Hdr.Len = binary.BigEndian.Uint32(b[0:])
+	p.Hdr.ID = binary.BigEndian.Uint32(b[4:])
+	p.Hdr.Status = binary.BigEndian.Uint32(b[8:])
+	p.Hdr.Seq = binary.BigEndian.Uint32(b[12:])
+
+	if p.Hdr.Len > MaxSMPPPacketSize {
+		return fmt.Errorf("Packet body is too large (%d, allowed only %d bytes)", p.Hdr.Len, MaxSMPPPacketSize)
+	}
+	if p.Hdr.Len < 16 {
+		return fmt.Errorf("Packet body is too short (%d)", p.Hdr.Len)
+	}
+	return nil
+}
+
 // Encode ENQUIRE_LINK
-func (s *SMPPSession) EncodeEnquireLink(seq uint32) ([]byte) {
+func (s *SMPPSession) EncodeEnquireLink(seq uint32) []byte {
 	buf := make([]byte, 16)
 	binary.BigEndian.PutUint32(buf, 16)
 	binary.BigEndian.PutUint32(buf[4:], libsmpp.CMD_ENQUIRE_LINK)
@@ -17,7 +59,7 @@ func (s *SMPPSession) EncodeEnquireLink(seq uint32) ([]byte) {
 }
 
 // Encode ENQUIRE_LINK_RESP
-func (s *SMPPSession) EncodeEnquireLinkResp(seq uint32) ([]byte) {
+func (s *SMPPSession) EncodeEnquireLinkResp(seq uint32) []byte {
 	buf := make([]byte, 16)
 	binary.BigEndian.PutUint32(buf, 16)
 	binary.BigEndian.PutUint32(buf[4:], libsmpp.CMD_ENQUIRE_LINK_RESP)
@@ -27,13 +69,13 @@ func (s *SMPPSession) EncodeEnquireLinkResp(seq uint32) ([]byte) {
 }
 
 // Encode BindResp
-func (s *SMPPSession) EncodeBindResp(ID uint32, seq uint32, status uint32, systemID string) ([]byte) {
+func (s *SMPPSession) EncodeBindResp(ID uint32, seq uint32, status uint32, systemID string) []byte {
 	buf := make([]byte, MaxSMPPPacketSize)
 
 	pl := uint32(16 + len(systemID) + 1)
 
 	binary.BigEndian.PutUint32(buf, pl)
-	binary.BigEndian.PutUint32(buf[4:], ID + 0x80000000)
+	binary.BigEndian.PutUint32(buf[4:], ID+0x80000000)
 	binary.BigEndian.PutUint32(buf[8:], status)
 	binary.BigEndian.PutUint32(buf[12:], seq)
 	copy(buf[16:16+len(systemID)], []byte(systemID))
@@ -48,64 +90,67 @@ func (s *SMPPSession) DecodeBindResp(p *SMPPPacket, b []byte) (state uint32, Sys
 	if p.Hdr.Len == 16 {
 		return
 	}
-	SystemID, _, err = ReadCString(b, len(b),"SystemID")
+	SystemID, _, err = ReadCString(b, len(b), "SystemID")
 	return
 }
 
 // Generate SubmitSM Resp packet
-func (s *SMPPSession) EncodeSubmitSmResp(p SMPPPacket, status uint32, msgID string) (pr SMPPPacket){
+func (s *SMPPSession) EncodeSubmitSmResp(p SMPPPacket, status uint32, msgID string) (pr SMPPPacket) {
 	pr = SMPPPacket{
-		Hdr:SMPPHeader{
-			ID: libsmpp.CMD_SUBMIT_SM_RESP,
+		Hdr: SMPPHeader{
+			ID:     libsmpp.CMD_SUBMIT_SM_RESP,
 			Status: status,
-			Seq: p.Hdr.Seq,
+			Seq:    p.Hdr.Seq,
 		},
-		BodyLen: uint32(len(msgID) + 1),
+		BodyLen:     uint32(len(msgID) + 1),
 		SeqComplete: true,
 	}
-	pr.Body = make([]byte, len(msgID)+1);
+	pr.Body = make([]byte, len(msgID)+1)
 	copy(pr.Body, msgID)
 	return
 }
 
 // Generate DeliverSM Resp packet
-func (s *SMPPSession) EncodeDeliverSmResp(p SMPPPacket, status uint32) (pr SMPPPacket){
+func (s *SMPPSession) EncodeDeliverSmResp(p SMPPPacket, status uint32) (pr SMPPPacket) {
 	pr = SMPPPacket{
-		Hdr:SMPPHeader{
-			ID: libsmpp.CMD_DELIVER_SM_RESP,
+		Hdr: SMPPHeader{
+			ID:     libsmpp.CMD_DELIVER_SM_RESP,
 			Status: status,
-			Seq: p.Hdr.Seq,
+			Seq:    p.Hdr.Seq,
 		},
-		BodyLen: 1,
+		BodyLen:     1,
 		SeqComplete: true,
 	}
-	pr.Body = make([]byte, 1);
+	pr.Body = make([]byte, 1)
 	pr.Body[0] = 0
 	return
 }
 
 // Generate GENERIC_NACK
-func (s *SMPPSession) EncodeGenericNack(p SMPPPacket, status uint32) (pr SMPPPacket){
+func (s *SMPPSession) EncodeGenericNack(p SMPPPacket, status uint32) (pr SMPPPacket) {
 	pr = SMPPPacket{
-		Hdr:SMPPHeader{
-			ID: libsmpp.CMD_DELIVER_SM,
+		Hdr: SMPPHeader{
+			ID:     libsmpp.CMD_DELIVER_SM,
 			Status: status,
-			Seq: p.Hdr.Seq,
+			Seq:    p.Hdr.Seq,
 		},
-		BodyLen: 0,
+		BodyLen:     0,
 		SeqComplete: true,
 	}
 	return
 }
 
-func (s *SMPPSession) DecodeBind(p *SMPPPacket, b []byte) (error) {
+func (s *SMPPSession) DecodeBind(p *SMPPPacket, b []byte) error {
 	// Validate correct command ID
 	switch p.Hdr.ID {
-	case libsmpp.CMD_BIND_RECEIVER:    s.Cs.sm = CSMPPRX
-	case libsmpp.CMD_BIND_TRANSMITTER: s.Cs.sm = CSMPPTX
-	case libsmpp.CMD_BIND_TRANSCIEVER: s.Cs.sm = CSMPPTRX
+	case libsmpp.CMD_BIND_RECEIVER:
+		s.Cs.sm = CSMPPRX
+	case libsmpp.CMD_BIND_TRANSMITTER:
+		s.Cs.sm = CSMPPTX
+	case libsmpp.CMD_BIND_TRANSCIEVER:
+		s.Cs.sm = CSMPPTRX
 	default:
-		return fmt.Errorf("Unsupported bind commaind ID [%d]", p.Hdr.ID);
+		return fmt.Errorf("Unsupported bind commaind ID [%d]", p.Hdr.ID)
 	}
 
 	// Decode systemID
@@ -169,7 +214,7 @@ func (s *SMPPSession) DecodeBind(p *SMPPPacket, b []byte) (error) {
 // Generate BIND packet
 func (s *SMPPSession) EncodeBind(m ConnSMPPMode, b SMPPBind) (p SMPPPacket, err error) {
 	var cmdid uint32
-	switch (m) {
+	switch m {
 	case CSMPPTX:
 		cmdid = libsmpp.CMD_BIND_TRANSMITTER
 	case CSMPPRX:
@@ -181,16 +226,16 @@ func (s *SMPPSession) EncodeBind(m ConnSMPPMode, b SMPPBind) (p SMPPPacket, err 
 
 	//
 	// Validate max entity len
-	if (len(b.SystemID) > 16) {
+	if len(b.SystemID) > 16 {
 		return SMPPPacket{}, fmt.Errorf("Invalid length of [SystemID]: %d, maxLen = 16", len(b.SystemID))
 	}
-	if (len(b.Password) > 9) {
+	if len(b.Password) > 9 {
 		return SMPPPacket{}, fmt.Errorf("Invalid length of [Password]: %d, maxLen = 9", len(b.Password))
 	}
-	if (len(b.SystemType) > 13) {
+	if len(b.SystemType) > 13 {
 		return SMPPPacket{}, fmt.Errorf("Invalid length of [SystemType]: %d, maxLen = 13", len(b.SystemType))
 	}
-	if (len(b.AddrRange) > 41) {
+	if len(b.AddrRange) > 41 {
 		return SMPPPacket{}, fmt.Errorf("Invalid length of [AddressRange]: %d, maxLen = 41", len(b.SystemType))
 	}
 
@@ -226,9 +271,9 @@ func (s *SMPPSession) EncodeBind(m ConnSMPPMode, b SMPPBind) (p SMPPPacket, err 
 	offset++
 
 	p = SMPPPacket{
-		Hdr:         SMPPHeader{ID: cmdid},
+		Hdr:     SMPPHeader{ID: cmdid},
 		BodyLen: uint32(offset),
-		Body: make([]byte, offset),
+		Body:    make([]byte, offset),
 	}
 	copy(p.Body, buf[0:offset])
 

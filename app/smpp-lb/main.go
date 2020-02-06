@@ -7,34 +7,32 @@ import (
 	"time"
 )
 
-
-
 // FLAG: Stop handling traffic
 var stopCh chan struct{}
 
 func doStop() bool {
 	select {
-		case <-stopCh:
-			return true
-		default:
-			close(stopCh)
+	case <-stopCh:
+		return true
+	default:
+		close(stopCh)
 	}
 	return false
 }
 
 func hConn(id uint16, conn *net.TCPConn, pool *libsmpp.SessionPool) {
-//	defer conn.Close()
+	//	defer conn.Close()
 
 	// Allocate new SMPP Session structure
-	s := &libsmpp.SMPPSession{ ManualBindValidate: true, DebugLevel: 1 }
+	s := &libsmpp.SMPPSession{ManualBindValidate: true, DebugLevel: 1}
 	s.Init()
 
 	go s.RunIncoming(conn, id)
 
-	var msgID uint;
-	msgID = 1;
+	var msgID uint
+	msgID = 1
 
-	go func(id uint16, msgID *uint, s *libsmpp.SMPPSession){
+	go func(id uint16, msgID *uint, s *libsmpp.SMPPSession) {
 		var sv uint
 		sv = 0
 		c := time.Tick(1000 * time.Millisecond)
@@ -49,40 +47,38 @@ func hConn(id uint16, conn *net.TCPConn, pool *libsmpp.SessionPool) {
 				} else {
 					fmt.Println("[", id, "] During last 1s: -")
 				}
-			case <- s.Closed:
+			case <-s.Closed:
 				return
 			}
 		}
 	}(id, &msgID, s)
 
-
 	for {
 		select {
-			// Request for BIND validation
-			case x := <-s.BindValidator:
-				r := libsmpp.BindValidatorResponce{
-					ID:     x.ID,
-					SMSCID: "GoLib32",
-					Status: 0,
-				}
-				s.BindValidatorR <- r
+		// Request for BIND validation
+		case x := <-s.BindValidator:
+			r := libsmpp.BindValidatorResponce{
+				ID:     x.ID,
+				SMSCID: "GoLib32",
+				Status: 0,
+			}
+			s.BindValidatorR <- r
 
-			case x := <-s.Status:
-				fmt.Println("[", id, "] ## StatusUpdate: ",x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(),  ",", x.GetSMPPMode().String(),  ",", x.Error(),  ",", x.NError())
-				if x.GetSMPPState() == libsmpp.CSMPPBound {
-					// Pass session to SessionPool
-					pool.RegisterSession(s)
-					return
-				}
-
-			case <-s.Closed:
-				fmt.Println("[", id, "] Connection is closed!")
+		case x := <-s.Status:
+			fmt.Println("[", id, "] ## StatusUpdate: ", x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
+			if x.GetSMPPState() == libsmpp.CSMPPBound {
+				// Pass session to SessionPool
+				pool.RegisterSession(s)
 				return
+			}
+
+		case <-s.Closed:
+			fmt.Println("[", id, "] Connection is closed!")
+			return
 		}
 	}
 
 }
-
 
 func main() {
 	fmt.Println("Go start!")
@@ -94,7 +90,7 @@ func main() {
 	go outConnect(id, &pool)
 
 	// Listen socket for new connections
-	lAddr := &net.TCPAddr{IP: net.IPv4(0,0,0,0), Port: 2775}
+	lAddr := &net.TCPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 2775}
 
 	socket, err := net.ListenTCP("tcp4", lAddr)
 	if err != nil {
@@ -135,19 +131,18 @@ func outConnect(id uint16, pool *libsmpp.SessionPool) {
 		AddrTON:    0,
 		AddrNPI:    0,
 		AddrRange:  "",
-		},
-	id)
+	},
+		id)
 
 	for {
 		select {
-			case x := <-s.Status:
-				fmt.Println("[", id, "] ## StatusUpdate: ",x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(),  ",", x.GetSMPPMode().String(),  ",", x.Error(),  ",", x.NError())
-				if x.GetSMPPState() == libsmpp.CSMPPBound {
-					// Pass session to SessionPool
-					pool.RegisterSession(s)
-					return
-				}
-
+		case x := <-s.Status:
+			fmt.Println("[", id, "] ## StatusUpdate: ", x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
+			if x.GetSMPPState() == libsmpp.CSMPPBound {
+				// Pass session to SessionPool
+				pool.RegisterSession(s)
+				return
+			}
 
 		case <-s.Closed:
 			fmt.Println("[", id, "] Connection is closed!")

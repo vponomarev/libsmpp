@@ -3,11 +3,9 @@ package libsmpp
 import (
 	"encoding/binary"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"libsmpp/const"
 	"net"
-	"os"
 	"time"
 )
 
@@ -50,14 +48,6 @@ func (s *SMPPSession) Init() {
 	// Allocate map for packet tracking
 	s.TrackRX = make(map[uint32]SMPPTracking, 100)
 	s.TrackTX = make(map[uint32]SMPPTracking, 100)
-
-	log.SetFormatter(&log.JSONFormatter{})
-	log.SetOutput(os.Stdout)
-	log.SetLevel(log.WarnLevel)
-
-	log.WithFields(log.Fields{
-		"type": "SMPPSession",
-	}).Info("Class init")
 }
 
 func (s *SMPPSession) reportStateS(q connState, ierr error, inerr error) {

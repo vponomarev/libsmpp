@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"libsmpp"
 	"net"
+	"os"
 	"time"
 )
 
@@ -21,10 +23,12 @@ func doStop() bool {
 }
 
 func hConn(id uint16, conn *net.TCPConn, pool *libsmpp.SessionPool) {
-	//	defer conn.Close()
 
 	// Allocate new SMPP Session structure
-	s := &libsmpp.SMPPSession{ManualBindValidate: true, DebugLevel: 1}
+	s := &libsmpp.SMPPSession{
+		ManualBindValidate: true,
+		DebugLevel:         1,
+	}
 	s.Init()
 
 	go s.RunIncoming(conn, id)
@@ -81,7 +85,14 @@ func hConn(id uint16, conn *net.TCPConn, pool *libsmpp.SessionPool) {
 }
 
 func main() {
-	fmt.Println("Go start!")
+	//	log.SetFormatter(&log.JSONFormatter{})
+	log.SetOutput(os.Stdout)
+	log.SetLevel(log.InfoLevel)
+
+	log.WithFields(log.Fields{
+		"type": "smpp-lb",
+	}).Info("Starting")
+
 	pool := libsmpp.SessionPool{}
 	pool.Init()
 
@@ -94,19 +105,19 @@ func main() {
 
 	socket, err := net.ListenTCP("tcp4", lAddr)
 	if err != nil {
-		fmt.Println("Error listening TCP socket:", err)
+		log.WithFields(log.Fields{"type": "smpp-lb"}).Error("Error listening TCP socket: ", err)
 		return
 	}
-	fmt.Println("Starting listening on: ", socket.Addr().String())
+	log.WithFields(log.Fields{"type": "smpp-lb"}).Warning("Starting listening on: ", socket.Addr().String())
 
 	for {
 		conn, err := socket.AcceptTCP()
 		id++
 		if err != nil {
-			fmt.Println("Error accepting socket connection:", err)
+			log.WithFields(log.Fields{"type": "smpp-lb"}).Error("Error accepting socket connection: ", err)
 			return
 		}
-		fmt.Println("[", id, "] Incoming connection from: ", conn.RemoteAddr().String())
+		log.WithFields(log.Fields{"type": "smpp-lb", "remoteIP": conn.RemoteAddr().String()}).Warning("Received incoming conneciton")
 		go hConn(id, conn, &pool)
 	}
 }

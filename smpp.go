@@ -76,6 +76,7 @@ func (s *SMPPSession) bindTimeouter(t int) {
 	select {
 	case <-time.After(time.Duration(t) * time.Second):
 		if s.Cs.GetSMPPState() != CSMPPBound {
+			fmt.Println("bindTimeouter(", t, ") Event triggered!")
 			s.conn.Close()
 		}
 	case <-s.Closed:
@@ -108,7 +109,7 @@ func (s *SMPPSession) enquireResponder(p *SMPPPacket, seq uint32) {
 	s.OutboxRAW <- s.EncodeEnquireLinkRespRAW(p.Hdr.Seq)
 }
 
-// Return change of window tracking
+// Packet REQ/RESP tracking engine
 // dir ConnDirection:
 // * CDirOutgoing - packets, that are sent to socket
 // * CDirIncoming - packets. that are received from socket
@@ -467,12 +468,4 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 		default:
 		}
 	}
-
-	/*	NEVER BE HERE */
-	time.Sleep(5 * time.Second)
-
-	// Initiate close
-	s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, nil, nil)
-	fmt.Println("[", id, "] Closing connection")
-
 }

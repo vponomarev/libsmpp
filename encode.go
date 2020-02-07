@@ -175,7 +175,7 @@ func (s *SMPPSession) DecodeBind(p *SMPPPacket) error {
 		return erx
 	}
 
-	if offset >= int(p.Hdr.Len) {
+	if offset >= int(p.BodyLen) {
 		return fmt.Errorf("Invalid packet, no data for InterfaceVersion")
 	}
 
@@ -183,29 +183,29 @@ func (s *SMPPSession) DecodeBind(p *SMPPPacket) error {
 	s.Bind.IVersion = uint(p.Body[offset])
 	offset++
 
-	if offset >= int(p.Hdr.Len) {
+	if offset >= int(p.BodyLen) {
 		return fmt.Errorf("Invalid packet, no data for AddrTON")
 	}
 
 	// AddrTON
 	s.Bind.AddrTON = uint(p.Body[offset])
 	offset++
-	if offset > int(p.Hdr.Len) {
+	if offset > int(p.BodyLen) {
 		return fmt.Errorf("Invalid packet, no data for AddrNPI")
 	}
 
 	// AddrNPI
 	s.Bind.AddrNPI = uint(p.Body[offset])
 	offset++
-	if offset > int(p.Hdr.Len) {
+	if offset >= int(p.BodyLen) {
 		return fmt.Errorf("Invalid packet, no data for AddressRange")
 	}
 
 	s.Bind.AddrRange, l, erx = ReadCString(p.Body[offset:], 13, "AddressRange")
 	offset += l
 
-	if offset != int(p.Hdr.Len-16) {
-		return fmt.Errorf("Invalid packet body len [HDR: %d, Context: %d]", p.Hdr.Len, offset)
+	if offset != int(p.BodyLen) {
+		return fmt.Errorf("Invalid packet body len [HDR: %d, Context: %d]", p.BodyLen, offset)
 	}
 
 	return nil
@@ -222,20 +222,21 @@ func (s *SMPPSession) EncodeBind(m ConnSMPPMode, b SMPPBind) (p SMPPPacket, err 
 	case CSMPPTRX:
 		cmdid = libsmpp.CMD_BIND_TRANSCIEVER
 	default:
+		return SMPPPacket{}, fmt.Errorf("Invalid connection mode")
 	}
 
 	//
 	// Validate max entity len
-	if len(b.SystemID) > 16 {
+	if len(b.SystemID) > 15 {
 		return SMPPPacket{}, fmt.Errorf("Invalid length of [SystemID]: %d, maxLen = 16", len(b.SystemID))
 	}
-	if len(b.Password) > 9 {
+	if len(b.Password) > 8 {
 		return SMPPPacket{}, fmt.Errorf("Invalid length of [Password]: %d, maxLen = 9", len(b.Password))
 	}
-	if len(b.SystemType) > 13 {
+	if len(b.SystemType) > 12 {
 		return SMPPPacket{}, fmt.Errorf("Invalid length of [SystemType]: %d, maxLen = 13", len(b.SystemType))
 	}
-	if len(b.AddrRange) > 41 {
+	if len(b.AddrRange) > 40 {
 		return SMPPPacket{}, fmt.Errorf("Invalid length of [AddressRange]: %d, maxLen = 41", len(b.SystemType))
 	}
 

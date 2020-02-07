@@ -3,9 +3,11 @@ package libsmpp
 import (
 	"encoding/binary"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"libsmpp/const"
 	"net"
+	"os"
 	"time"
 )
 
@@ -49,6 +51,13 @@ func (s *SMPPSession) Init() {
 	s.TrackRX = make(map[uint32]SMPPTracking, 100)
 	s.TrackTX = make(map[uint32]SMPPTracking, 100)
 
+	log.SetFormatter(&log.JSONFormatter{})
+	log.SetOutput(os.Stdout)
+	log.SetLevel(log.WarnLevel)
+
+	log.WithFields(log.Fields{
+		"type": "SMPPSession",
+	}).Info("Class init")
 }
 
 func (s *SMPPSession) reportStateS(q connState, ierr error, inerr error) {
@@ -84,6 +93,31 @@ func (s *SMPPSession) bindTimeouter(t int) {
 	}
 }
 
+// Packet expiration tracker
+func (s *SMPPSession) trackPacketTimeout() {
+	tk := time.NewTicker(500 * time.Millisecond)
+	select {
+	case <-tk.C:
+		// TODO
+		// 1. Search for expired packets
+		s.winMutex.RLock()
+		for k, v := range s.TrackRX {
+			if time.Since(v.T) > time.Duration(s.RXMaxTimeoutMS)*time.Millisecond {
+				fmt.Println("#", k, " - Expired RX packet")
+			}
+		}
+		for k, v := range s.TrackTX {
+			if time.Since(v.T) > time.Duration(s.TXMaxTimeoutMS)*time.Millisecond {
+				fmt.Println("#", k, " - Expired RX packet")
+			}
+		}
+		s.winMutex.RUnlock()
+
+	case <-s.Closed:
+		return
+	}
+}
+
 // Allocate SEQUENCE number
 func (s *SMPPSession) allocateSeqNo() uint32 {
 	s.seqMTX.RLock()
@@ -94,15 +128,18 @@ func (s *SMPPSession) allocateSeqNo() uint32 {
 }
 
 func (s *SMPPSession) enquireSender(t int) error {
+	fmt.Println("#EnquireSender (", t, "): started ENQUIRE_LINK generator")
 	tk := time.NewTicker(time.Duration(t) * time.Second)
-	select {
-	case <-tk.C:
-		// Send outgoing ENQUIRE_LINK packet
-		s.OutboxRAW <- s.EncodeEnquireLinkRAW(s.allocateSeqNo())
-		return nil
-	case <-s.Closed:
-		return nil
+	for {
+		select {
+		case <-tk.C:
+			// Send outgoing ENQUIRE_LINK packet
+			s.OutboxRAW <- s.EncodeEnquireLinkRAW(s.allocateSeqNo())
+		case <-s.Closed:
+			return nil
+		}
 	}
+	return nil
 }
 
 func (s *SMPPSession) enquireResponder(p *SMPPPacket, seq uint32) {
@@ -391,6 +428,12 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 			// Report bound state
 			s.reportStateS(connState{ts: CTCPIncoming, ss: CSMPPBound}, nil, nil)
 
+			// Start tracking packet expiration
+			s.trackPacketTimeout()
+
+			// Start ENQUIRE_LINK Generator
+			go s.enquireSender(10)
+
 		// =============================================================
 		// BIND_RECEIVER_RESP/BIND_TRANSMITTER_RESP/BIND_TRANSCIEVER_RESP
 		case libsmpp.CMD_BIND_RECEIVER_RESP, libsmpp.CMD_BIND_TRANSMITTER_RESP, libsmpp.CMD_BIND_TRANSCIEVER_RESP:
@@ -406,6 +449,9 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 					// Report Bound state
 					s.reportStateS(connState{ss: CSMPPBound}, nil, nil)
 					s.Bind.SMSCID = sid
+
+					// Start ENQUIRE_LINK Generator
+					go s.enquireSender(10)
 				} else {
 					s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Received BIND_RESP packet with error code %d", st), nil)
 					return

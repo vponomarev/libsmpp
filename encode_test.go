@@ -5,6 +5,7 @@ import (
 	"github.com/franela/goblin"
 	libsmpp "libsmpp/const"
 	"testing"
+	//	"time"
 )
 
 func TestEncodeEnquireLink(t *testing.T) {
@@ -83,7 +84,7 @@ func TestEncodeEnquireLink(t *testing.T) {
 	})
 
 	g.Describe("Test of packet generation functions", func() {
-		g.It("[ENQUIRE_LINK] Encode packet", func() {
+		g.It("[ENQUIRE_LINK] Encode RAW packet", func() {
 			expected := []byte{
 				0x00, 0x00, 0x00, 0x10,
 				0x00, 0x00, 0x00, 0x15,
@@ -95,7 +96,7 @@ func TestEncodeEnquireLink(t *testing.T) {
 			g.Assert(res).Equal(expected)
 		})
 
-		g.It("[ENQUIRE_LINK_RESP] Encode packet", func() {
+		g.It("[ENQUIRE_LINK_RESP] Encode RAW packet", func() {
 			expected := []byte{
 				0x00, 0x00, 0x00, 0x10,
 				0x80, 0x00, 0x00, 0x15,
@@ -107,7 +108,7 @@ func TestEncodeEnquireLink(t *testing.T) {
 			g.Assert(res).Equal(expected)
 		})
 
-		g.It("[BIND_RESP] Encode packet", func() {
+		g.It("[BIND_RESP] Encode RAW packet", func() {
 			systemID := "ABCDEF876"
 			expected := []byte{
 				0x00, 0x00, 0x00, 0x1A, // Length
@@ -121,7 +122,7 @@ func TestEncodeEnquireLink(t *testing.T) {
 			g.Assert(res).Equal(expected)
 		})
 
-		g.It("[BIND_RESP] Decode packet", func() {
+		g.It("[BIND_RESP] Decode RAW packet", func() {
 			systemID := "ABCDEF876"
 			input := []byte{
 				0x00, 0x00, 0x00, 0x1A, // Length
@@ -133,13 +134,103 @@ func TestEncodeEnquireLink(t *testing.T) {
 			s := SMPPSession{}
 			p := &SMPPPacket{}
 			rErr := p.DecodeHDR(input)
+			p.Body = input[16:]
 			g.Assert(rErr == nil).IsTrue()
 
-			rState, rSystemID, rErr := s.DecodeBindResp(p, input[16:])
+			rState, rSystemID, rErr := s.DecodeBindResp(p)
 			g.Assert(uint32(0xfedcba98)).Equal(rState)
 			g.Assert(rErr == nil).IsTrue()
 			g.Assert(rSystemID).Equal(systemID)
 		})
 
+		g.It("[SUBMIT_SM_RESP] Encode packet", func() {
+			expected := SMPPPacket{
+				Hdr: SMPPHeader{
+					ID:     0x80000004,
+					Status: 0x12345678,
+					Seq:    0xabcdef01,
+				},
+				Body:        []byte("MsgIDInfo\x00"),
+				BodyLen:     10,
+				SeqComplete: true,
+			}
+			s := SMPPSession{}
+			p := SMPPPacket{
+				Hdr: SMPPHeader{
+					Seq: 0xabcdef01,
+				},
+			}
+			rP := s.EncodeSubmitSmResp(p, 0x12345678, "MsgIDInfo")
+			g.Assert(expected).Equal(rP)
+		})
+
+		g.It("[DELIVER_SM_RESP] Encode packet", func() {
+			expected := SMPPPacket{
+				Hdr: SMPPHeader{
+					ID:     0x80000005,
+					Status: 0x12345678,
+					Seq:    0xabcdef01,
+				},
+				Body:        []byte("\x00"),
+				BodyLen:     1,
+				SeqComplete: true,
+			}
+			s := SMPPSession{}
+			p := SMPPPacket{
+				Hdr: SMPPHeader{
+					Seq: 0xabcdef01,
+				},
+			}
+			rP := s.EncodeDeliverSmResp(p, 0x12345678)
+			g.Assert(expected).Equal(rP)
+		})
+
+		g.It("[GENERIC_NACK] Encode packet", func() {
+			expected := SMPPPacket{
+				Hdr: SMPPHeader{
+					ID:     0x80000000,
+					Status: 0x12345678,
+					Seq:    0xabcdef01,
+				},
+				SeqComplete: true,
+			}
+			s := SMPPSession{}
+			p := SMPPPacket{
+				Hdr: SMPPHeader{
+					Seq: 0xabcdef01,
+				},
+			}
+			rP := s.EncodeGenericNack(p, 0x12345678)
+			g.Assert(expected).Equal(rP)
+		})
 	})
+
+	g.Describe("BIND: DecodeBind() function test", func() {
+		g.It("Command ID validation", func() {
+			s := SMPPSession{}
+			p := SMPPPacket{
+				Hdr: SMPPHeader{
+					ID: 758456697,
+				},
+			}
+			err := s.DecodeBind(&p)
+			g.Assert(err).Equal(fmt.Errorf("Unsupported bind commaind ID [758456697]"))
+		})
+
+		g.It("Packet decode", func() {
+			s := SMPPSession{}
+			p := SMPPPacket{
+				Hdr: SMPPHeader{
+					ID: 0x00000001,
+				},
+				Body: []byte("SystemID0987654\x00password\x00system_type*\x00"),
+			}
+			rErr := s.DecodeBind(&p)
+			g.Assert(rErr).Equal(nil)
+			g.Assert(s.Bind.SystemID).Equal("SystemID09876543")
+
+		})
+
+	})
+
 }

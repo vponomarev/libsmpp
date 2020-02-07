@@ -85,12 +85,12 @@ func (s *SMPPSession) EncodeBindRespRAW(ID uint32, seq uint32, status uint32, sy
 }
 
 // Decode BindResp
-func (s *SMPPSession) DecodeBindResp(p *SMPPPacket, b []byte) (state uint32, SystemID string, err error) {
+func (s *SMPPSession) DecodeBindResp(p *SMPPPacket) (state uint32, SystemID string, err error) {
 	state = p.Hdr.Status
 	if p.Hdr.Len == 16 {
 		return
 	}
-	SystemID, _, err = ReadCString(b, len(b), "SystemID")
+	SystemID, _, err = ReadCString(p.Body, len(p.Body), "SystemID")
 	return
 }
 
@@ -130,7 +130,7 @@ func (s *SMPPSession) EncodeDeliverSmResp(p SMPPPacket, status uint32) (pr SMPPP
 func (s *SMPPSession) EncodeGenericNack(p SMPPPacket, status uint32) (pr SMPPPacket) {
 	pr = SMPPPacket{
 		Hdr: SMPPHeader{
-			ID:     libsmpp.CMD_DELIVER_SM,
+			ID:     libsmpp.CMD_GENERIC_NACK,
 			Status: status,
 			Seq:    p.Hdr.Seq,
 		},
@@ -140,7 +140,7 @@ func (s *SMPPSession) EncodeGenericNack(p SMPPPacket, status uint32) (pr SMPPPac
 	return
 }
 
-func (s *SMPPSession) DecodeBind(p *SMPPPacket, b []byte) error {
+func (s *SMPPSession) DecodeBind(p *SMPPPacket) error {
 	// Validate correct command ID
 	switch p.Hdr.ID {
 	case libsmpp.CMD_BIND_RECEIVER:
@@ -156,20 +156,20 @@ func (s *SMPPSession) DecodeBind(p *SMPPPacket, b []byte) error {
 	// Decode systemID
 	var l, offset int
 	var erx error
-	offset = 16
-	s.Bind.SystemID, l, erx = ReadCString(b[offset:], 16, "SystemID")
+	offset = 0
+	s.Bind.SystemID, l, erx = ReadCString(p.Body[offset:], 16, "SystemID")
 	offset += l
 	if erx != nil {
 		return erx
 	}
 
-	s.Bind.Password, l, erx = ReadCString(b[offset:], 9, "Password")
+	s.Bind.Password, l, erx = ReadCString(p.Body[offset:], 9, "Password")
 	offset += l
 	if erx != nil {
 		return erx
 	}
 
-	s.Bind.SystemType, l, erx = ReadCString(b[offset:], 13, "SystemType")
+	s.Bind.SystemType, l, erx = ReadCString(p.Body[offset:], 13, "SystemType")
 	offset += l
 	if erx != nil {
 		return erx
@@ -180,7 +180,7 @@ func (s *SMPPSession) DecodeBind(p *SMPPPacket, b []byte) error {
 	}
 
 	// Interface version
-	s.Bind.IVersion = uint(b[offset])
+	s.Bind.IVersion = uint(p.Body[offset])
 	offset++
 
 	if offset >= int(p.Hdr.Len) {
@@ -188,23 +188,23 @@ func (s *SMPPSession) DecodeBind(p *SMPPPacket, b []byte) error {
 	}
 
 	// AddrTON
-	s.Bind.AddrTON = uint(b[offset])
+	s.Bind.AddrTON = uint(p.Body[offset])
 	offset++
 	if offset > int(p.Hdr.Len) {
 		return fmt.Errorf("Invalid packet, no data for AddrNPI")
 	}
 
 	// AddrNPI
-	s.Bind.AddrNPI = uint(b[offset])
+	s.Bind.AddrNPI = uint(p.Body[offset])
 	offset++
 	if offset > int(p.Hdr.Len) {
 		return fmt.Errorf("Invalid packet, no data for AddressRange")
 	}
 
-	s.Bind.AddrRange, l, erx = ReadCString(b[offset:], 13, "AddressRange")
+	s.Bind.AddrRange, l, erx = ReadCString(p.Body[offset:], 13, "AddressRange")
 	offset += l
 
-	if offset != int(p.Hdr.Len) {
+	if offset != int(p.Hdr.Len-16) {
 		return fmt.Errorf("Invalid packet body len [HDR: %d, Context: %d]", p.Hdr.Len, offset)
 	}
 

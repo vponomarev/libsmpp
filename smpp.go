@@ -277,6 +277,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 	p := &SMPPPacket{}
 
 	// Waiting for incoming data
+	hdrBuf := make([]byte, 16)
 	buf := make([]byte, MaxSMPPPacketSize)
 
 	// Send BIND request for outgoing connections
@@ -292,12 +293,12 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 	// Message processing loop
 	for {
 		// Read packet header
-		if _, err := io.ReadFull(conn, buf[0:16]); err != nil {
+		if _, err := io.ReadFull(conn, hdrBuf); err != nil {
 			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error reading incoming packet header (16 bytes)!"), err)
 			return
 		}
 		// Decode header
-		if err := p.DecodeHDR(buf); err != nil {
+		if err := p.DecodeHDR(hdrBuf); err != nil {
 			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error decoding header!"), err)
 			return
 		}
@@ -311,16 +312,21 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 
 		// Read least part of the packet
 		if p.Hdr.Len > 16 {
-			if _, err := io.ReadFull(conn, buf[16:p.Hdr.Len]); err != nil {
+			if _, err := io.ReadFull(conn, buf[0:p.Hdr.Len-16]); err != nil {
 				s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error reading last part of the packet!"), err)
 				return
 			}
 		}
 		if s.DebugLevel > 2 {
-			fmt.Printf("[ %d ][%d] libsmpp: Received CMD: [%x (%s)][size: %d][%x]\n", id, p.Hdr.Seq, p.Hdr.ID, libsmpp.CmdName(p.Hdr.ID), p.Hdr.Len, buf[16:p.Hdr.Len])
+			fmt.Printf("[ %d ][%d] libsmpp: Received CMD: [%x (%s)][size: %d][%x]\n", id, p.Hdr.Seq, p.Hdr.ID, libsmpp.CmdName(p.Hdr.ID), p.Hdr.Len, buf)
 		}
 
-		// Handle incoming commang
+		// Fill packet body
+		p.BodyLen = p.Hdr.Len - 16
+		p.Body = make([]byte, p.BodyLen)
+		copy(p.Body, buf[0:p.BodyLen])
+
+		// Handle incoming command
 		switch p.Hdr.ID {
 		// =============================================================
 		// BIND RECEIVER/TRANSMITTER/TRANSCIEVER
@@ -338,7 +344,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 			}
 
 			// Handle BIND request
-			if erx := s.DecodeBind(p, buf); erx == nil {
+			if erx := s.DecodeBind(p); erx == nil {
 				if s.DebugLevel > 1 {
 					fmt.Println("Incoming BIND request")
 					fmt.Printf("SystemID: [%s]\n", s.Bind.SystemID)
@@ -393,7 +399,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 				return
 			}
 			// Handle BIND request
-			if st, sid, erx := s.DecodeBindResp(p, buf); erx == nil {
+			if st, sid, erx := s.DecodeBindResp(p); erx == nil {
 				// Success
 				if st == 0 {
 					// Report Bound state
@@ -433,7 +439,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 			}
 			if p.Hdr.Len > 16 {
 				px.Body = make([]byte, p.Hdr.Len-16)
-				copy(px.Body, buf[16:])
+				copy(px.Body, p.Body)
 			}
 			s.winTrackEvent(CDirIncoming, p)
 
@@ -449,7 +455,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 			}
 			if p.Hdr.Len > 16 {
 				px.Body = make([]byte, p.Hdr.Len-16)
-				copy(px.Body, buf[16:])
+				copy(px.Body, p.Body)
 			}
 
 			// Process message and mark if this is duplicated response

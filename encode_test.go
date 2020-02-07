@@ -223,14 +223,46 @@ func TestEncodeEnquireLink(t *testing.T) {
 				Hdr: SMPPHeader{
 					ID: 0x00000001,
 				},
-				Body: []byte("SystemID0987654\x00password\x00system_type*\x00"),
+				Body: []byte("SystemID0987654\x00password\x00system_type*\x00\x34\x01\x02ARDFC\x00"),
 			}
+			p.Hdr.Len = uint32(16 + len(p.Body))
+			p.BodyLen = uint32(len(p.Body))
 			rErr := s.DecodeBind(&p)
 			g.Assert(rErr).Equal(nil)
-			g.Assert(s.Bind.SystemID).Equal("SystemID09876543")
-
+			g.Assert(s.Bind.SystemID).Equal("SystemID0987654")
+			g.Assert(s.Bind.Password).Equal("password")
+			g.Assert(s.Bind.SystemType).Equal("system_type*")
+			g.Assert(s.Bind.AddrTON).Equal(uint(1))
+			g.Assert(s.Bind.AddrNPI).Equal(uint(2))
+			g.Assert(s.Bind.AddrRange).Equal("ARDFC")
 		})
-
 	})
 
+	g.Describe("BIND: EncodeBind() function test", func() {
+		g.It("Command ID validation", func() {
+			s := SMPPSession{}
+			_, rErr := s.EncodeBind(99, SMPPBind{})
+			g.Assert(rErr).Equal(fmt.Errorf("Invalid connection mode"))
+		})
+
+		g.It("Packet encode", func() {
+			s := SMPPSession{}
+			input := SMPPBind{
+				ConnMode:   0,
+				SystemID:   "SystemID",
+				Password:   "Password",
+				SystemType: "SystemType",
+				IVersion:   0x34,
+				AddrTON:    0x42,
+				AddrNPI:    0x16,
+				AddrRange:  "ThisIsAddressRange",
+				SMSCID:     "",
+			}
+			expected := []byte("SystemID\x00Password\x00SystemType\x00\x34\x42\x16ThisIsAddressRange\x00")
+			rP, rErr := s.EncodeBind(CSMPPTX, input)
+			g.Assert(rErr).Equal(nil)
+			g.Assert(rP.Hdr.ID).Equal(uint32(2))
+			g.Assert(rP.Body).Equal(expected)
+		})
+	})
 }

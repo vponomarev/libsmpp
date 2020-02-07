@@ -91,7 +91,7 @@ func TestEncodeEnquireLink(t *testing.T) {
 				0x12, 0x34, 0x56, 0x78,
 			}
 			s := SMPPSession{}
-			res := s.EncodeEnquireLink(0x12345678)
+			res := s.EncodeEnquireLinkRAW(0x12345678)
 			g.Assert(res).Equal(expected)
 		})
 
@@ -103,7 +103,7 @@ func TestEncodeEnquireLink(t *testing.T) {
 				0x12, 0x34, 0x56, 0x78,
 			}
 			s := SMPPSession{}
-			res := s.EncodeEnquireLinkResp(0x12345678)
+			res := s.EncodeEnquireLinkRespRAW(0x12345678)
 			g.Assert(res).Equal(expected)
 		})
 
@@ -117,7 +117,7 @@ func TestEncodeEnquireLink(t *testing.T) {
 				0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x38, 0x37, 0x36, 0x00, // SystemID
 			}
 			s := SMPPSession{}
-			res := s.EncodeBindResp(libsmpp.CMD_BIND_TRANSMITTER, 0x12345678, 0xFEDCBA98, systemID)
+			res := s.EncodeBindRespRAW(libsmpp.CMD_BIND_TRANSMITTER, 0x12345678, 0xFEDCBA98, systemID)
 			g.Assert(res).Equal(expected)
 		})
 

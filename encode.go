@@ -49,7 +49,7 @@ func (p *SMPPPacket) DecodeHDR(b []byte) error {
 }
 
 // Encode ENQUIRE_LINK
-func (s *SMPPSession) EncodeEnquireLink(seq uint32) []byte {
+func (s *SMPPSession) EncodeEnquireLinkRAW(seq uint32) []byte {
 	buf := make([]byte, 16)
 	binary.BigEndian.PutUint32(buf, 16)
 	binary.BigEndian.PutUint32(buf[4:], libsmpp.CMD_ENQUIRE_LINK)
@@ -59,7 +59,7 @@ func (s *SMPPSession) EncodeEnquireLink(seq uint32) []byte {
 }
 
 // Encode ENQUIRE_LINK_RESP
-func (s *SMPPSession) EncodeEnquireLinkResp(seq uint32) []byte {
+func (s *SMPPSession) EncodeEnquireLinkRespRAW(seq uint32) []byte {
 	buf := make([]byte, 16)
 	binary.BigEndian.PutUint32(buf, 16)
 	binary.BigEndian.PutUint32(buf[4:], libsmpp.CMD_ENQUIRE_LINK_RESP)
@@ -69,7 +69,7 @@ func (s *SMPPSession) EncodeEnquireLinkResp(seq uint32) []byte {
 }
 
 // Encode BindResp
-func (s *SMPPSession) EncodeBindResp(ID uint32, seq uint32, status uint32, systemID string) []byte {
+func (s *SMPPSession) EncodeBindRespRAW(ID uint32, seq uint32, status uint32, systemID string) []byte {
 	buf := make([]byte, MaxSMPPPacketSize)
 
 	pl := uint32(16 + len(systemID) + 1)

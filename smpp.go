@@ -97,7 +97,7 @@ func (s *SMPPSession) enquireSender(t int) error {
 	select {
 	case <-tk.C:
 		// Send outgoing ENQUIRE_LINK packet
-		s.OutboxRAW <- s.EncodeEnquireLink(s.allocateSeqNo())
+		s.OutboxRAW <- s.EncodeEnquireLinkRAW(s.allocateSeqNo())
 		return nil
 	case <-s.Closed:
 		return nil
@@ -105,7 +105,7 @@ func (s *SMPPSession) enquireSender(t int) error {
 }
 
 func (s *SMPPSession) enquireResponder(p *SMPPPacket, seq uint32) {
-	s.OutboxRAW <- s.EncodeEnquireLinkResp(p.Hdr.Seq)
+	s.OutboxRAW <- s.EncodeEnquireLinkRespRAW(p.Hdr.Seq)
 }
 
 // Return change of window tracking
@@ -330,7 +330,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 				// Invalid bind state
 				s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Received BIND request, while session is in %d (%s) state", s.Cs.GetSMPPState(), s.Cs.GetSMPPState().String()), nil)
 				// Generate INVALID_BIND_STATE and close
-				b := s.EncodeBindResp(p.Hdr.ID, p.Hdr.Seq, libsmpp.ESME_RINVBNDSTS, "GO-SMPP")
+				b := s.EncodeBindRespRAW(p.Hdr.ID, p.Hdr.Seq, libsmpp.ESME_RINVBNDSTS, "GO-SMPP")
 				s.OutboxRAW <- b
 
 				s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Received BIND packet in state %d (%s)!", s.Cs.GetSMPPState(), s.Cs.GetSMPPState().String()), nil)
@@ -364,7 +364,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 				// Wait for response
 				select {
 				case r := <-s.BindValidatorR:
-					b := s.EncodeBindResp(p.Hdr.ID, p.Hdr.Seq, r.Status, r.SMSCID)
+					b := s.EncodeBindRespRAW(p.Hdr.ID, p.Hdr.Seq, r.Status, r.SMSCID)
 					s.OutboxRAW <- b
 					// IF Status != 0 - report bind failure state
 					if r.Status != 0 {
@@ -377,7 +377,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 				}
 			} else {
 				// Automatic acknowledge bind request
-				b := s.EncodeBindResp(p.Hdr.ID, p.Hdr.Seq, 0, "GO-SMPP-AUTO")
+				b := s.EncodeBindRespRAW(p.Hdr.ID, p.Hdr.Seq, 0, "GO-SMPP-AUTO")
 				s.OutboxRAW <- b
 			}
 

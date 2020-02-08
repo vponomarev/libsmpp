@@ -118,7 +118,7 @@ func (s *SMPPSession) allocateSeqNo() uint32 {
 }
 
 func (s *SMPPSession) enquireSender(t int) error {
-	fmt.Println("#EnquireSender (", t, "): started ENQUIRE_LINK generator")
+	fmt.Println("[", s.SessionID, "]#EnquireSender (", t, "): started ENQUIRE_LINK generator")
 	tk := time.NewTicker(time.Duration(t) * time.Second)
 	for {
 		select {
@@ -208,7 +208,7 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 
 // Take messages from outbox and send messages to the wire
 func (s *SMPPSession) processOutbox() {
-	fmt.Println("# Started OutBox processor")
+	fmt.Println("[", s.SessionID, "]# Started OutBox processor")
 	for {
 		select {
 		case p := <-s.Outbox:
@@ -266,16 +266,16 @@ func (s *SMPPSession) processOutbox() {
 }
 
 //
-func (s *SMPPSession) RunOutgoing(conn *net.TCPConn, b SMPPBind, id uint16) {
+func (s *SMPPSession) RunOutgoing(conn *net.TCPConn, b SMPPBind, id uint32) {
 	s.Run(conn, CDirOutgoing, b, id)
 }
 
-func (s *SMPPSession) RunIncoming(conn *net.TCPConn, id uint16) {
+func (s *SMPPSession) RunIncoming(conn *net.TCPConn, id uint32) {
 	s.Run(conn, CDirIncoming, SMPPBind{}, id)
 }
 
 //
-func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id uint16) {
+func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id uint32) {
 	defer conn.Close()
 	defer close(s.Closed)
 

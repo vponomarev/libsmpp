@@ -45,11 +45,11 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 		SessionID: p.maxSessionID,
 		Session:   s,
 	}
-	p.sessionMutex.RUnlock()
-	fmt.Println("SP.RegisterSession: Registered new session in pool")
+	fmt.Println("SP.RegisterSession: Registered session [", s.SessionID, "] in pool")
 
 	// Register PoolEntry in slice
 	p.Pool[pe.SessionID] = pe
+	p.sessionMutex.RUnlock()
 
 	// Start session traffic processing
 	for {
@@ -112,8 +112,9 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 			fmt.Println("SP.RegisterSession: Session closed")
 
 			// Remove session from pool
-			// TODO
+			p.sessionMutex.RLock()
 			delete(p.Pool, pe.SessionID)
+			p.sessionMutex.RUnlock()
 
 			// Return
 			return

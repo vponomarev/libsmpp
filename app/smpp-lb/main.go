@@ -22,12 +22,13 @@ func doStop() bool {
 	return false
 }
 
-func hConn(id uint16, conn *net.TCPConn, pool *libsmpp.SessionPool) {
+func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool) {
 
 	// Allocate new SMPP Session structure
 	s := &libsmpp.SMPPSession{
 		ManualBindValidate: true,
 		DebugLevel:         1,
+		SessionID:          id,
 	}
 	s.Init()
 
@@ -36,7 +37,7 @@ func hConn(id uint16, conn *net.TCPConn, pool *libsmpp.SessionPool) {
 	var msgID uint
 	msgID = 1
 
-	go func(id uint16, msgID *uint, s *libsmpp.SMPPSession) {
+	go func(msgID *uint, s *libsmpp.SMPPSession) {
 		var sv uint
 		sv = 0
 		c := time.Tick(1000 * time.Millisecond)
@@ -46,16 +47,16 @@ func hConn(id uint16, conn *net.TCPConn, pool *libsmpp.SessionPool) {
 			case <-c:
 				sn := *msgID
 				if sn > sv {
-					fmt.Println("[", id, "] During last 1s: ", (sn - sv))
+					fmt.Println("[", s.SessionID, "] During last 1s: ", (sn - sv))
 					sv = sn
 				} else {
-					fmt.Println("[", id, "] During last 1s: -")
+					fmt.Println("[", s.SessionID, "] During last 1s: -")
 				}
 			case <-s.Closed:
 				return
 			}
 		}
-	}(id, &msgID, s)
+	}(&msgID, s)
 
 	for {
 		select {
@@ -91,12 +92,12 @@ func main() {
 
 	log.WithFields(log.Fields{
 		"type": "smpp-lb",
-	}).Info("Starting")
+	}).Info("Start")
 
 	pool := libsmpp.SessionPool{}
 	pool.Init()
 
-	var id uint16 = 1
+	var id uint32 = 1
 
 	go outConnect(id, &pool)
 
@@ -108,7 +109,7 @@ func main() {
 		log.WithFields(log.Fields{"type": "smpp-lb"}).Error("Error listening TCP socket: ", err)
 		return
 	}
-	log.WithFields(log.Fields{"type": "smpp-lb"}).Warning("Starting listening on: ", socket.Addr().String())
+	log.WithFields(log.Fields{"type": "smpp-lb", "service": "ListenTCP"}).Warning("Starting listening on: ", socket.Addr().String())
 
 	for {
 		conn, err := socket.AcceptTCP()
@@ -122,15 +123,17 @@ func main() {
 	}
 }
 
-func outConnect(id uint16, pool *libsmpp.SessionPool) {
+func outConnect(id uint32, pool *libsmpp.SessionPool) {
 	dest := &net.TCPAddr{IP: net.IPv4(172, 21, 211, 199), Port: 2775}
 	conn, err := net.DialTCP("tcp", nil, dest)
 	if err != nil {
-		fmt.Printf("Cannot connect to [%s]\n", dest)
+		log.WithFields(log.Fields{"type": "smpp-lb", "service": "outConnect", "remoteIP": dest}).Warning("Cannot connect to")
 		return
 	}
 
-	s := &libsmpp.SMPPSession{}
+	s := &libsmpp.SMPPSession{
+		SessionID: id,
+	}
 	s.Init()
 
 	go s.RunOutgoing(conn, libsmpp.SMPPBind{
@@ -148,7 +151,7 @@ func outConnect(id uint16, pool *libsmpp.SessionPool) {
 	for {
 		select {
 		case x := <-s.Status:
-			fmt.Println("[", id, "] ## StatusUpdate: ", x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
+			log.WithFields(log.Fields{"type": "smpp-lb", "SID": s.SessionID, "service": "outConnect", "action": "StatusUpdate"}).Warning(x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
 			if x.GetSMPPState() == libsmpp.CSMPPBound {
 				// Pass session to SessionPool
 				pool.RegisterSession(s)
@@ -156,7 +159,7 @@ func outConnect(id uint16, pool *libsmpp.SessionPool) {
 			}
 
 		case <-s.Closed:
-			fmt.Println("[", id, "] Connection is closed!")
+			log.WithFields(log.Fields{"type": "smpp-lb", "SID": s.SessionID, "service": "outConnect", "action": "close"}).Warning("Connection is closed")
 			return
 		}
 	}

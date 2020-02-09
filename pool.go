@@ -72,7 +72,7 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 		//
 		case x := <-s.InboxR:
 			// Try to unpark message
-			fmt.Println("[", pe.SessionID, "] SP ## Incoming [REPLY] packet: ", x)
+			fmt.Println("[", pe.SessionID, "] QuickPath REPLY: ", x)
 
 			// Check if we have parked record
 			if x.UplinkTransactionID > 0 {
@@ -101,15 +101,15 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 					p.QResp <- pp
 				} else {
 					// - identity lost
-					fmt.Println("[", pe.SessionID, "] SP ## [REPLY] Received untracked packet: ", x)
+					fmt.Println("[", pe.SessionID, "] QuickPath REPLY: Received untracked packet: ", x)
 				}
 			} else {
 				// No UplinkTransactionID is set
-				fmt.Println("[", pe.SessionID, "] SP ## [REPLY] Reply doesnot contain UplinkTransactionID: ", x)
+				fmt.Println("[", pe.SessionID, "] QuickPath REPLY: Reply doesnot contain UplinkTransactionID: ", x)
 			}
 
 		case <-s.Closed:
-			fmt.Println("SP.RegisterSession: Session closed")
+			fmt.Println("[", pe.SessionID, "] SP.RegisterSession: Session closed")
 
 			// Remove session from pool
 			p.sessionMutex.RLock()
@@ -131,7 +131,7 @@ func (p *SessionPool) QManager() {
 			msgID++
 			origSession := pp.OrigSessionID
 
-			fmt.Println("SP.QManager# [", origSession, "=>", pp.DestSessionID, "][", msgID, "] Incoming packet: ", pp.Packet)
+			fmt.Println("[", origSession, "=>", pp.DestSessionID, "] SP.QManager# [", msgID, "] Incoming packet: ", pp.Packet)
 
 			// ==========================================================
 			// HERE IS ROUTING ENGINE
@@ -172,11 +172,11 @@ func (p *SessionPool) QManager() {
 				}
 				p.trackMutex.RUnlock()
 
-				fmt.Println("Message is routed to: ", destSession)
+				fmt.Println("[", pp.OrigSessionID, "] Message is routed to: ", destSession)
 				p.QResp <- pn
 			} else {
 				// Route undefined
-				fmt.Println("Route is not found, generate self-response")
+				fmt.Println("[", pp.OrigSessionID, "] Route is not found, generate self-response")
 				// Generate response [ SELF-RESPONSE ]
 				sx := SMPPSession{}
 
@@ -204,13 +204,7 @@ func (p *SessionPool) QDeliveryManager() {
 	for {
 		select {
 		case pp := <-p.QResp:
-			fmt.Println("SP.QDeliveryManager# [", pp.OrigSessionID, "=>", pp.DestSessionID, "] packet: ", pp.Packet)
-			/*
-				if !pp.IsReply {
-					fmt.Println("SP.QDeliveryManager: received packet with !IsReply")
-					break
-				}
-			*/
+			fmt.Println("[", pp.OrigSessionID, "=>", pp.DestSessionID, "] SP.QDeliveryManager#  packet: ", pp.Packet)
 
 			destSession := pp.DestSessionID
 
@@ -226,7 +220,7 @@ func (p *SessionPool) QDeliveryManager() {
 			if ps != nil {
 				ps.Outbox <- pp.Packet
 			} else {
-				fmt.Println("SP.QDeliveryManager# CANNOT FIND DESTINATION SESSION")
+				fmt.Println("[", pp.OrigSessionID, "] SP.QDeliveryManager# CANNOT FIND DESTINATION SESSION")
 			}
 		}
 	}

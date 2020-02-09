@@ -75,7 +75,7 @@ func (s *SMPPSession) bindTimeouter(t int) {
 	select {
 	case <-time.After(time.Duration(t) * time.Second):
 		if s.Cs.GetSMPPState() != CSMPPBound {
-			fmt.Println("bindTimeouter(", t, ") Event triggered!")
+			fmt.Println("[", s.SessionID, "] bindTimeouter(", t, ") Event triggered!")
 			s.conn.Close()
 		}
 	case <-s.Closed:
@@ -110,15 +110,15 @@ func (s *SMPPSession) trackPacketTimeout() {
 
 // Allocate SEQUENCE number
 func (s *SMPPSession) allocateSeqNo() uint32 {
-	s.seqMTX.RLock()
+	s.seqMTX.Lock()
 	s.LastTXSeq++
 	x := s.LastTXSeq
-	s.seqMTX.RUnlock()
+	s.seqMTX.Unlock()
 	return x
 }
 
 func (s *SMPPSession) enquireSender(t int) error {
-	fmt.Println("[", s.SessionID, "]#EnquireSender (", t, "): started ENQUIRE_LINK generator")
+	fmt.Println("[", s.SessionID, "]# EnquireSender (", t, "): started ENQUIRE_LINK generator")
 	tk := time.NewTicker(time.Duration(t) * time.Second)
 	for {
 		select {
@@ -143,7 +143,7 @@ func (s *SMPPSession) enquireResponder(p *SMPPPacket, seq uint32) {
 // flagDropPacket - FLAG if packet shouldn't be delivered to recipient, because it is already delivered by timeout or this is wrong packet
 func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropPacket bool) {
 	// Lock mutex
-	s.winMutex.RLock()
+	s.winMutex.Lock()
 
 	// Process CommandID
 	switch p.Hdr.ID {
@@ -168,7 +168,7 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 				T:                   time.Now(),
 				UplinkTransactionID: p.UplinkTransactionID,
 			}
-			fmt.Println("winTrackEvent(", dir, ")# TrackTX[", p.Hdr.Seq, "]: set UplinkID=", p.UplinkTransactionID)
+			fmt.Println("[", s.SessionID, "] winTrackEvent(", dir, ")# TrackTX[", p.Hdr.Seq, "] >set UplinkID:", p.UplinkTransactionID)
 		}
 	case libsmpp.CMD_SUBMIT_SM_RESP, libsmpp.CMD_DELIVER_SM_RESP, libsmpp.CMD_QUERY_SM_RESP, libsmpp.CMD_REPLACE_SM_RESP, libsmpp.CMD_CANCEL_SM_RESP:
 		if dir == CDirIncoming {
@@ -176,13 +176,13 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 			if x, ok := s.TrackTX[p.Hdr.Seq]; ok {
 				// Preserve UplingTransactionID for reply packet
 				p.UplinkTransactionID = x.UplinkTransactionID
-				fmt.Println("winTrackEvent(", dir, ")# TrackTX[", p.Hdr.Seq, "]: get UplinkID:", x.UplinkTransactionID)
+				fmt.Println("[", s.SessionID, "] winTrackEvent(", dir, ")# TrackTX[", p.Hdr.Seq, "] <get UplinkID:", x.UplinkTransactionID)
 
 				// Remove tracking of sent packet
 				delete(s.TrackTX, p.Hdr.Seq)
 			} else {
 				// Received unhandled _RESP packet
-				fmt.Println("winTrackEvent(", dir, ")# TrackTX[", p.Hdr.Seq, "] IS LOST")
+				fmt.Println("[", s.SessionID, "]  winTrackEvent(", dir, ")# TrackTX[", p.Hdr.Seq, "] IS LOST")
 
 				// Mark, that packet will be duplicated
 				flagDropPacket = true
@@ -194,14 +194,14 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 				// Remove tracking of received packet
 				delete(s.TrackRX, p.Hdr.Seq)
 			} else {
-				fmt.Println("winTrackEvent# Incoming # Received untracked Seq=", p.Hdr.Seq, "")
+				fmt.Println("[", s.SessionID, "] winTrackEvent# Incoming # Received untracked Seq=", p.Hdr.Seq, "")
 
 				// Mark, that packet will be duplicated
 				flagDropPacket = true
 			}
 		}
 	}
-	s.winMutex.RUnlock()
+	s.winMutex.Unlock()
 
 	return
 }
@@ -239,26 +239,26 @@ func (s *SMPPSession) processOutbox() {
 			n, err := s.conn.Write(buf)
 			if err != nil {
 				// BREAK CONNECTION
-				fmt.Println("#> processOutbox() - error writing Outbox [", n, "bytes]")
+				fmt.Println("[", s.SessionID, "]#> processOutbox() - error writing Outbox [", n, "bytes]")
 				return
 			}
 			if s.DebugLevel > 1 {
-				fmt.Println("#> outBox sent ", n, "bytes")
+				fmt.Println("[", s.SessionID, "]#> outBox sent ", n, "bytes")
 			}
 		case p := <-s.OutboxRAW:
 			// Send RAW packet from SMPPPacket.Body
 			n, err := s.conn.Write(p)
 			if err != nil {
 				// BREAK CONNECTION
-				fmt.Println("#> processOutboxRAW() - error writing Outbox [", n, "bytes]")
+				fmt.Println("[", s.SessionID, "]#> processOutboxRAW() - error writing Outbox [", n, "bytes]")
 				return
 			}
 			if s.DebugLevel > 1 {
-				fmt.Println("#> outBoxRAW sent ", n, "bytes")
+				fmt.Println("[", s.SessionID, "]#> outBoxRAW sent ", n, "bytes")
 			}
 
 		case <-s.Closed:
-			fmt.Println("# Closing outbox processor")
+			fmt.Println("[", s.SessionID, "]# Closing outbox processor")
 			return
 		}
 	}
@@ -346,7 +346,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 			}
 		}
 		if s.DebugLevel > 2 {
-			fmt.Printf("[ %d ][%d] libsmpp: Received CMD: [%x (%s)][size: %d][%x]\n", id, p.Hdr.Seq, p.Hdr.ID, libsmpp.CmdName(p.Hdr.ID), p.Hdr.Len, buf)
+			fmt.Printf("[ %d ][%d] libsmpp: Received CMD: [%x (%s)][size: %d][%x]\n", s.SessionID, p.Hdr.Seq, p.Hdr.ID, libsmpp.CmdName(p.Hdr.ID), p.Hdr.Len, buf)
 		}
 
 		// Fill packet body
@@ -374,7 +374,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 			// Handle BIND request
 			if erx := s.DecodeBind(p); erx == nil {
 				if s.DebugLevel > 1 {
-					fmt.Println("Incoming BIND request")
+					fmt.Println("[", s.SessionID, "] Incoming BIND request")
 					fmt.Printf("SystemID: [%s]\n", s.Bind.SystemID)
 					fmt.Printf("Password: [%s]\n", s.Bind.Password)
 					fmt.Printf("System Type: [%s]\n", s.Bind.SystemType)
@@ -461,7 +461,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 		case libsmpp.CMD_UNBIND:
 			// Unbind requst, drop connection
 			if s.DebugLevel > 1 {
-				fmt.Println("Incoming UNBIND request")
+				fmt.Println("[", s.SessionID, "] Incoming UNBIND request")
 			}
 			return
 

@@ -3,11 +3,17 @@ package main
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
 	"libsmpp"
 	"net"
 	"os"
 	"time"
 )
+
+type Config struct {
+	Port int `yaml:"port,omitempty"`
+}
 
 func main() {
 	log.SetOutput(os.Stdout)
@@ -17,8 +23,25 @@ func main() {
 		"type": "smpp-server",
 	}).Info("Start")
 
+	// Load configuration file
+	var config Config
+
+	configFileName := "config.yml"
+	source, err := ioutil.ReadFile(configFileName)
+	if err == nil {
+		if err = yaml.Unmarshal(source, &config); err == nil {
+			log.WithFields(log.Fields{
+				"type": "smpp-server",
+			}).Info("Loaded configuration file: ", configFileName)
+		}
+	}
+
+	// Fill default values for config
+	if config.Port < 1 {
+		config.Port = 2775
+	}
 	// Listen socket for new connections
-	lAddr := &net.TCPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 2775}
+	lAddr := &net.TCPAddr{IP: net.IPv4(0, 0, 0, 0), Port: config.Port}
 
 	socket, err := net.ListenTCP("tcp4", lAddr)
 	if err != nil {
@@ -103,10 +126,20 @@ func hConn(id uint32, conn *net.TCPConn) {
 
 func sessionProcessor(s *libsmpp.SMPPSession) {
 
+	var msgID uint32
+	msgID = 1
+
 	for {
 		select {
-		case x := <-s.Inbox:
-			fmt.Println("[", s.SessionID, "] Incoming packet: ", x)
+		case p := <-s.Inbox:
+			fmt.Println("[", s.SessionID, "] Incoming packet: ", p)
+
+			// Confirm packet
+			pR := s.EncodeSubmitSmResp(p, 0, fmt.Sprintf("%06x", msgID))
+			msgID++
+
+			s.Outbox <- pR
+
 		case <-s.Closed:
 			return
 		}

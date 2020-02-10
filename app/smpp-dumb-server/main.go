@@ -12,12 +12,54 @@ import (
 )
 
 type Config struct {
-	Port int `yaml:"port,omitempty"`
+	Port     int    `yaml:"port,omitempty"`
+	LogLevel string `yaml:"logLevel,omitempty"`
+}
+
+type Params struct {
+	LogLevel log.Level
+	Flags    struct {
+		LogLevel bool
+	}
+}
+
+func ProcessCMDLine() (p Params) {
+	// Set default
+	p.LogLevel = log.InfoLevel
+
+	var pv bool
+	var pvn string
+	for _, param := range os.Args[1:] {
+		if pv {
+			switch pvn {
+			// LogLevel
+			case "-log":
+				l, err := log.ParseLevel(param)
+				if err != nil {
+					l = log.InfoLevel
+					fmt.Print("Incorrect LogLevel [", param, "], set LogLevel to: ", l.String())
+				} else {
+					p.LogLevel = l
+					p.Flags.LogLevel = true
+				}
+			}
+		} else {
+			switch param {
+			case "-log":
+				pvn = param
+				pv = true
+			}
+		}
+	}
+	return p
 }
 
 func main() {
+	pParam := ProcessCMDLine()
+
+	fmt.Println("LogLevel:", pParam.LogLevel.String())
 	log.SetOutput(os.Stdout)
-	log.SetLevel(log.DebugLevel)
+	log.SetLevel(pParam.LogLevel)
 
 	log.WithFields(log.Fields{
 		"type": "smpp-server",
@@ -33,6 +75,18 @@ func main() {
 			log.WithFields(log.Fields{
 				"type": "smpp-server",
 			}).Info("Loaded configuration file: ", configFileName)
+		}
+	}
+
+	// Load LogLevel from config if present
+	if (len(config.LogLevel) > 0) && (!pParam.Flags.LogLevel) {
+		if l, err := log.ParseLevel(config.LogLevel); err == nil {
+			pParam.LogLevel = l
+
+			log.SetLevel(pParam.LogLevel)
+			log.WithFields(log.Fields{
+				"type": "smpp-server",
+			}).Warning("Override LogLevel to: ", pParam.LogLevel.String())
 		}
 	}
 
@@ -55,10 +109,10 @@ func main() {
 		conn, err := socket.AcceptTCP()
 		id++
 		if err != nil {
-			log.WithFields(log.Fields{"type": "smpp-lb"}).Error("Error accepting socket connection: ", err)
+			log.WithFields(log.Fields{"type": "smpp-server"}).Error("Error accepting socket connection: ", err)
 			return
 		}
-		log.WithFields(log.Fields{"type": "smpp-lb", "remoteIP": conn.RemoteAddr().String()}).Warning("Received incoming conneciton")
+		log.WithFields(log.Fields{"type": "smpp-server", "remoteIP": conn.RemoteAddr().String()}).Warning("Received incoming connectiton")
 		go hConn(id, conn)
 	}
 }
@@ -110,7 +164,7 @@ func hConn(id uint32, conn *net.TCPConn) {
 			s.BindValidatorR <- r
 
 		case x := <-s.Status:
-			log.WithFields(log.Fields{"type": "smpp-lb", "SID": s.SessionID, "service": "inConnect", "action": "StatusUpdate"}).Warning(x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
+			log.WithFields(log.Fields{"type": "smpp-server", "SID": s.SessionID, "service": "inConnect", "action": "StatusUpdate"}).Info(x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
 			if x.GetSMPPState() == libsmpp.CSMPPBound {
 				// Pass session to SessionPool
 				sessionProcessor(s)

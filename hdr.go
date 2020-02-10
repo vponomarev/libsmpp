@@ -178,6 +178,23 @@ type SMPPSession struct {
 	LastTXSeq uint32
 	seqMTX    sync.RWMutex
 
+	// Enquire Link related information
+	Enquire struct {
+		Sent struct {
+			ID   uint32
+			Date time.Time
+			Ack  struct {
+				ID   uint32
+				Date time.Time
+			}
+		}
+		Recv struct {
+			ID   uint32
+			Date time.Time
+		}
+		sync.RWMutex
+	}
+
 	TXMaxTimeoutMS uint32 // Maximum time we wait for reply from external platform [ send error confirmation in case of trigger ]
 	RXMaxTimeoutMS uint32 // Max timeout we wait for reply from our buddy (in case of manual confirmation) [ send confirmation to peer in case of trigger ]
 

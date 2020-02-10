@@ -2,6 +2,7 @@ package libsmpp
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"libsmpp/const"
 	//	"net"
 	// "sync"
@@ -45,7 +46,7 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 		SessionID: p.maxSessionID,
 		Session:   s,
 	}
-	fmt.Println("SP.RegisterSession: Registered session [", s.SessionID, "] in pool")
+	log.WithFields(log.Fields{"type": "pool", "SID": pe.SessionID, "service": "RegisterSession"}).Info("New session registered")
 
 	// Register PoolEntry in slice
 	p.Pool[pe.SessionID] = pe
@@ -55,7 +56,7 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 	for {
 		select {
 		case x := <-s.Status:
-			fmt.Println("[", pe.SessionID, "] SP ## StatusUpdate: ", x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
+			log.WithFields(log.Fields{"type": "pool", "SID": pe.SessionID, "service": "RegisterSession", "action": "StatusUpdate"}).Info(x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
 
 		case x := <-s.Inbox:
 			// Prepare packet for sending to Pool inbox
@@ -72,7 +73,7 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 		//
 		case x := <-s.InboxR:
 			// Try to unpark message
-			fmt.Println("[", pe.SessionID, "] QuickPath REPLY: ", x)
+			log.WithFields(log.Fields{"type": "pool", "SID": pe.SessionID, "service": "RegisterSession", "action": "Inbox"}).Info("Incoming QuickReply: ", x)
 
 			// Check if we have parked record
 			if x.UplinkTransactionID > 0 {

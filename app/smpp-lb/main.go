@@ -78,7 +78,7 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool) {
 			s.BindValidatorR <- r
 
 		case x := <-s.Status:
-			fmt.Println("[", id, "] ## StatusUpdate: ", x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
+			log.WithFields(log.Fields{"type": "smpp-lb", "SID": s.SessionID, "service": "inConnect", "action": "StatusUpdate"}).Warning(x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
 			if x.GetSMPPState() == libsmpp.CSMPPBound {
 				// Pass session to SessionPool
 				pool.RegisterSession(s)
@@ -96,7 +96,7 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool) {
 func main() {
 	//	log.SetFormatter(&log.JSONFormatter{})
 	log.SetOutput(os.Stdout)
-	log.SetLevel(log.InfoLevel)
+	log.SetLevel(log.DebugLevel)
 
 	log.WithFields(log.Fields{
 		"type": "smpp-lb",

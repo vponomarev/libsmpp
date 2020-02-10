@@ -3,6 +3,7 @@ package libsmpp
 import (
 	"encoding/binary"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"libsmpp/const"
 	"net"
@@ -118,13 +119,21 @@ func (s *SMPPSession) allocateSeqNo() uint32 {
 }
 
 func (s *SMPPSession) enquireSender(t int) error {
-	fmt.Println("[", s.SessionID, "]# EnquireSender (", t, "): started ENQUIRE_LINK generator")
+	log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "EnquireSender", "tick": t}).Info("Starting ENQUIRE SENDER")
 	tk := time.NewTicker(time.Duration(t) * time.Second)
 	for {
 		select {
 		case <-tk.C:
-			// Send outgoing ENQUIRE_LINK packet
-			s.OutboxRAW <- s.EncodeEnquireLinkRAW(s.allocateSeqNo())
+			// Initiate sending of outgoing ENQUIRE_LINK packet
+			seq := s.allocateSeqNo()
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "EnquireSender", "seq": seq}).Debug("Sent")
+
+			s.Enquire.Lock()
+			s.Enquire.Sent.ID = seq
+			s.Enquire.Sent.Date = time.Now()
+			s.Enquire.Unlock()
+
+			s.OutboxRAW <- s.EncodeEnquireLinkRAW(seq)
 		case <-s.Closed:
 			return nil
 		}
@@ -132,7 +141,7 @@ func (s *SMPPSession) enquireSender(t int) error {
 	return nil
 }
 
-func (s *SMPPSession) enquireResponder(p *SMPPPacket, seq uint32) {
+func (s *SMPPSession) enquireResponder(p *SMPPPacket) {
 	s.OutboxRAW <- s.EncodeEnquireLinkRespRAW(p.Hdr.Seq)
 }
 
@@ -208,7 +217,7 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 
 // Take messages from outbox and send messages to the wire
 func (s *SMPPSession) processOutbox() {
-	fmt.Println("[", s.SessionID, "]# Started OutBox processor")
+	log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox"}).Info("Starting OUTBOX Processor")
 	for {
 		select {
 		case p := <-s.Outbox:
@@ -373,6 +382,8 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 
 			// Handle BIND request
 			if erx := s.DecodeBind(p); erx == nil {
+				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "PacketLoop", "action": "BIND", "SystemID": s.Bind.SystemID}).Debug("Received")
+
 				if s.DebugLevel > 1 {
 					fmt.Println("[", s.SessionID, "] Incoming BIND request")
 					fmt.Printf("SystemID: [%s]\n", s.Bind.SystemID)
@@ -454,15 +465,20 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 		// =============================================================
 		// ENQUIRE_LINK
 		case libsmpp.CMD_ENQUIRE_LINK:
-			s.enquireResponder(p, s.allocateSeqNo())
+			s.Enquire.Lock()
+			s.Enquire.Recv.ID = p.Hdr.Seq
+			s.Enquire.Recv.Date = time.Now()
+			s.Enquire.Unlock()
+
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "PacketLoop", "action": "ENQUIRE_LINK", "seq": p.Hdr.Seq}).Debug("Received")
+
+			s.enquireResponder(p)
 
 		// =============================================================
 		// UNBIND
 		case libsmpp.CMD_UNBIND:
 			// Unbind requst, drop connection
-			if s.DebugLevel > 1 {
-				fmt.Println("[", s.SessionID, "] Incoming UNBIND request")
-			}
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "PacketLoop", "action": "UNBIND", "seq": p.Hdr.Seq}).Debug("Received")
 			return
 
 		// =============================================================
@@ -500,6 +516,17 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 			px.UplinkTransactionID = p.UplinkTransactionID
 
 			s.InboxR <- *px
+
+		// =============================================================
+		// ENQUIRE_LINK_RESP
+		case libsmpp.CMD_ENQUIRE_LINK_RESP:
+			seq := p.Hdr.Seq
+			s.Enquire.Lock()
+			s.Enquire.Sent.Ack.ID = seq
+			s.Enquire.Sent.Ack.Date = time.Now()
+			s.Enquire.Unlock()
+
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "EnquireSender", "seq": seq}).Debug("Confirmed")
 
 		default:
 		}

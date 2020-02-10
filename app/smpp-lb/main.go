@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
 	"libsmpp"
 	"net"
 	"os"
@@ -11,6 +13,12 @@ import (
 
 // FLAG: Stop handling traffic
 var stopCh chan struct{}
+
+type Config struct {
+	Server struct {
+		Port int
+	}
+}
 
 func doStop() bool {
 	select {
@@ -94,6 +102,27 @@ func main() {
 		"type": "smpp-lb",
 	}).Info("Start")
 
+	// Load configuration file
+	config := Config{}
+
+	configFileName := "config.yml"
+	source, err := ioutil.ReadFile(configFileName)
+	if err == nil {
+		if err = yaml.Unmarshal(source, &config); err == nil {
+			log.WithFields(log.Fields{
+				"type": "smpp-server",
+			}).Info("Loaded configuration file: ", configFileName)
+		} else {
+			fmt.Println("Error loading config file: ", err)
+			return
+		}
+	}
+
+	// Fill default values for config
+	if config.Server.Port < 1 {
+		config.Server.Port = 2775
+	}
+
 	pool := libsmpp.SessionPool{}
 	pool.Init()
 
@@ -102,7 +131,7 @@ func main() {
 	go outConnect(id, &pool)
 
 	// Listen socket for new connections
-	lAddr := &net.TCPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 2775}
+	lAddr := &net.TCPAddr{IP: net.IPv4(0, 0, 0, 0), Port: config.Server.Port}
 
 	socket, err := net.ListenTCP("tcp4", lAddr)
 	if err != nil {

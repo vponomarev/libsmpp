@@ -354,10 +354,12 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 				return
 			}
 		}
-		if s.DebugLevel > 2 {
-			fmt.Printf("[ %d ][%d] libsmpp: Received CMD: [%x (%s)][size: %d][%x]\n", s.SessionID, p.Hdr.Seq, p.Hdr.ID, libsmpp.CmdName(p.Hdr.ID), p.Hdr.Len, buf)
-		}
-
+		log.WithFields(log.Fields{"type": "smpp", "service": "PacketLoop", "SID": s.SessionID, "action": fmt.Sprintf("%x (%s)", p.Hdr.ID, CmdName(p.Hdr.ID)), "Seq": p.Hdr.Seq, "Len": p.Hdr.Len}).Trace(fmt.Sprintf("%x", buf[0:p.Hdr.Len-16]))
+		/*
+			if s.DebugLevel > 2 {
+				fmt.Printf("[ %d ][%d] libsmpp: Received CMD: [%x (%s)][size: %d][%x]\n", s.SessionID, p.Hdr.Seq, p.Hdr.ID, libsmpp.CmdName(p.Hdr.ID), p.Hdr.Len, buf)
+			}
+		*/
 		// Fill packet body
 		p.BodyLen = p.Hdr.Len - 16
 		p.Body = make([]byte, p.BodyLen)
@@ -382,7 +384,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 
 			// Handle BIND request
 			if erx := s.DecodeBind(p); erx == nil {
-				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "PacketLoop", "action": "BIND", "SystemID": s.Bind.SystemID}).Debug("Received")
+				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "PacketLoop", "action": "BIND", "SystemID": s.Bind.SystemID}).Info("Received")
 
 				if s.DebugLevel > 1 {
 					fmt.Println("[", s.SessionID, "] Incoming BIND request")
@@ -413,10 +415,12 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 					s.OutboxRAW <- b
 					// IF Status != 0 - report bind failure state
 					if r.Status != 0 {
+						log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "PacketLoop", "action": "BIND", "SystemID": s.Bind.SystemID}).Info("Rejected")
 						time.Sleep(100 * time.Millisecond)
 						s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPBindFailed}, fmt.Errorf("Bind validator returned error code [%d]", r.Status), nil)
 						return
 					}
+					log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "PacketLoop", "action": "BIND", "SystemID": s.Bind.SystemID}).Info("Accepted")
 				case <-s.Closed:
 					return
 				}
@@ -424,6 +428,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 				// Automatic acknowledge bind request
 				b := s.EncodeBindRespRAW(p.Hdr.ID, p.Hdr.Seq, 0, "GO-SMPP-AUTO")
 				s.OutboxRAW <- b
+				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "PacketLoop", "action": "BIND", "SystemID": s.Bind.SystemID}).Info("AUTO-Accepted")
 			}
 
 			// Report bound state

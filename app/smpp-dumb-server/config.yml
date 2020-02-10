@@ -1,2 +1,6 @@
 port: 2500
+
+# Loglevel: trace / debug / info / warning / error / fatal / panic
 logLevel: debug
+#logLevel: trace
+

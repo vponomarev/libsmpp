@@ -128,30 +128,6 @@ func hConn(id uint32, conn *net.TCPConn) {
 
 	go s.RunIncoming(conn, id)
 
-	var msgID uint
-	msgID = 1
-
-	go func(msgID *uint, s *libsmpp.SMPPSession) {
-		var sv uint
-		sv = 0
-		c := time.Tick(1000 * time.Millisecond)
-		for {
-
-			select {
-			case <-c:
-				sn := *msgID
-				if sn > sv {
-					fmt.Println("[", s.SessionID, "] During last 1s: ", (sn - sv))
-					sv = sn
-				} else {
-					fmt.Println("[", s.SessionID, "] During last 1s: -")
-				}
-			case <-s.Closed:
-				return
-			}
-		}
-	}(&msgID, s)
-
 	for {
 		select {
 		// Request for BIND validation
@@ -179,14 +155,34 @@ func hConn(id uint32, conn *net.TCPConn) {
 }
 
 func sessionProcessor(s *libsmpp.SMPPSession) {
-
 	var msgID uint32
 	msgID = 1
+
+	go func(msgID *uint32, s *libsmpp.SMPPSession) {
+		var sv uint32
+		sv = 0
+		c := time.Tick(1000 * time.Millisecond)
+		for {
+
+			select {
+			case <-c:
+				sn := *msgID
+				if sn > sv {
+					fmt.Println("[", s.SessionID, "] During last 1s: ", (sn - sv), " [MAX:", sn, "]")
+					sv = sn
+				} else {
+					fmt.Println("[", s.SessionID, "] During last 1s: -")
+				}
+			case <-s.Closed:
+				return
+			}
+		}
+	}(&msgID, s)
 
 	for {
 		select {
 		case p := <-s.Inbox:
-			fmt.Println("[", s.SessionID, "] Incoming packet: ", p)
+			log.WithFields(log.Fields{"type": "smpp-server", "service": "PacketLoop", "SID": s.SessionID, "action": fmt.Sprintf("%x (%s)", p.Hdr.ID, libsmpp.CmdName(p.Hdr.ID)), "Seq": p.Hdr.Seq, "Len": p.Hdr.Len}).Trace(fmt.Sprintf("%x", p.Body))
 
 			// Confirm packet
 			pR := s.EncodeSubmitSmResp(p, 0, fmt.Sprintf("%06x", msgID))

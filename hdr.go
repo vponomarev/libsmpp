@@ -25,7 +25,7 @@ type SMPPHeader struct {
 }
 
 func (h SMPPHeader) String() string {
-	return fmt.Sprintf("[%d|%d,%s|%d|%d bytes]", h.Seq, h.ID, libsmpp.CMDNameMapping[h.ID], h.Status, h.Len)
+	return fmt.Sprintf("[%d|%d,%s|%d|%d bytes]", h.Seq, h.ID, CMDNameMapping[h.ID], h.Status, h.Len)
 }
 
 type SMPPPacket struct {
@@ -232,4 +232,38 @@ type SMPPTracking struct {
 	T         time.Time // Packet origination time
 
 	UplinkTransactionID uint32 // Uniq packet ID, provided by UPLINK
+}
+
+var CMDNameMapping = map[uint32]string{
+	libsmpp.CMD_GENERIC_NACK:          "GENERIC_NACK",
+	libsmpp.CMD_BIND_RECEIVER:         "BIND_RECEIVER",
+	libsmpp.CMD_BIND_RECEIVER_RESP:    "BIND_RECEIVER_RESP",
+	libsmpp.CMD_BIND_TRANSMITTER:      "BIND_TRANSMITTER",
+	libsmpp.CMD_BIND_TRANSMITTER_RESP: "BIND_TRANSMITTER_RESP",
+	libsmpp.CMD_QUERY_SM:              "QUERY_SM",
+	libsmpp.CMD_QUERY_SM_RESP:         "QUERY_SM_RESP",
+	libsmpp.CMD_SUBMIT_SM:             "SUBMIT_SM",
+	libsmpp.CMD_SUBMIT_SM_RESP:        "SUBMIT_SM_RESP",
+	libsmpp.CMD_DELIVER_SM:            "DELIVER_SM",
+	libsmpp.CMD_DELIVER_SM_RESP:       "DELIVER_SM_RESP",
+	libsmpp.CMD_UNBIND:                "UNBIND",
+	libsmpp.CMD_UNBIND_RESP:           "UNBIND_RESP",
+	libsmpp.CMD_REPLACE_SM:            "REPLACE_SM",
+	libsmpp.CMD_REPLACE_SM_RESP:       "REPLACE_SM_RESP",
+	libsmpp.CMD_CANCEL_SM:             "CANCEL_SM",
+	libsmpp.CMD_CANCEL_SM_RESP:        "CANCEL_SM_RESP",
+	libsmpp.CMD_BIND_TRANSCIEVER:      "BIND_TRANSCIEVER",
+	libsmpp.CMD_BIND_TRANSCIEVER_RESP: "BIND_TRANSCIEVER_RESP",
+	libsmpp.CMD_OUTBIND:               "OUTBIND",
+	libsmpp.CMD_ENQUIRE_LINK:          "ENQUIRE_LINK",
+	libsmpp.CMD_ENQUIRE_LINK_RESP:     "ENQUIRE_LINK_RESP",
+	libsmpp.CMD_SUBMIT_MULTI:          "SUBMIT_MULTI",
+	libsmpp.CMD_SUBMIT_MULTI_RESP:     "SUBMIT_MULTI_RESP",
+	libsmpp.CMD_ALERT_NOTIFICATION:    "ALERT_NOTIFICATION",
+	libsmpp.CMD_DATA_SM:               "DATA_SM",
+	libsmpp.CMD_DATA_SM_RESP:          "DATA_SM_RESP",
+}
+
+func CmdName(id uint32) string {
+	return CMDNameMapping[id]
 }

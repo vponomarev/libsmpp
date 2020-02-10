@@ -169,11 +169,13 @@ type BindValidatorResponce struct {
 type SMPPSession struct {
 	SessionID uint32 // Uniq sessionID, used for logging
 
-	Cs     connState
-	Bind   SMPPBind
-	Status chan ConnState
-	Closed chan interface{}
-	conn   *net.TCPConn
+	Cs       connState
+	Bind     SMPPBind
+	Status   chan ConnState
+	Closed   chan interface{}
+	closeMTX sync.RWMutex
+
+	conn *net.TCPConn
 
 	LastTXSeq uint32
 	seqMTX    sync.RWMutex
@@ -232,6 +234,37 @@ type SMPPTracking struct {
 	T         time.Time // Packet origination time
 
 	UplinkTransactionID uint32 // Uniq packet ID, provided by UPLINK
+}
+
+// TLV Code
+type TLVCode uint32
+
+// SUBMIT_SM structure
+type SMPPSubmit struct {
+	ServiceType string   // service_type C-Octet-String (max 6)
+	Source      struct { // Source Address structure
+		TON  uint8  // source_addr_ton
+		NPI  uint8  // source_addr_npi
+		Addr string // source_addr C-Octet-String (max 21)
+	}
+	Dest struct {
+		TON  uint8  // dest_addr_ton
+		NPI  uint8  // dest_addr_npi
+		Addr string // destination_addr C-Octet-String (max 21)
+	}
+	ESMClass              uint8  // esm_class
+	ProtocolID            uint8  // protocol_id
+	PriorityFlag          uint8  // priority_flag
+	ScheduledDeliveryTime string // scheduled_delivery_type C-Octet-String (1 or 17)
+	ValidityPeriod        string // validity_period  C-Octet-String (1 or 17)
+	RegisteredDelivery    uint8  // registered_delivery
+	ReplaceIfPresent      uint8  // replace_if_present
+	DataCoding            uint8  // data_coding
+	SmDefaultMsgID        uint8  // sm_default_msg_id
+	SmLength              uint8  // sm_length
+	ShortMessages         string // short_message (0-254)
+
+	TLV map[TLVCode]interface{}
 }
 
 var CMDNameMapping = map[uint32]string{

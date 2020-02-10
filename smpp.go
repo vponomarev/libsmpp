@@ -51,6 +51,21 @@ func (s *SMPPSession) Init() {
 	s.TrackTX = make(map[uint32]SMPPTracking, 100)
 }
 
+func (s *SMPPSession) Close(origin string) {
+	var f bool
+	s.closeMTX.Lock()
+	select {
+	case <-s.Closed:
+	default:
+		f = true
+		close(s.Closed)
+	}
+	s.closeMTX.Unlock()
+	if f {
+		log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Close"}).Info("Close is called from [ ", origin, " ]")
+	}
+}
+
 func (s *SMPPSession) reportStateS(q connState, ierr error, inerr error) {
 	// cd, ts, ss, sm
 	if q.cd != CDirUndefined {
@@ -217,6 +232,8 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 
 // Take messages from outbox and send messages to the wire
 func (s *SMPPSession) processOutbox() {
+	defer s.Close("processOutbox")
+
 	log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox"}).Info("Starting OUTBOX Processor")
 	for {
 		select {
@@ -248,23 +265,20 @@ func (s *SMPPSession) processOutbox() {
 			n, err := s.conn.Write(buf)
 			if err != nil {
 				// BREAK CONNECTION
-				fmt.Println("[", s.SessionID, "]#> processOutbox() - error writing Outbox [", n, "bytes]")
+				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox", "action": "write", "count": n}).Info("Outbox: error writing to socket")
 				return
 			}
-			if s.DebugLevel > 1 {
-				fmt.Println("[", s.SessionID, "]#> outBox sent ", n, "bytes")
-			}
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox", "action": "write", "count": n}).Trace("Outbox: sent to socket")
+
 		case p := <-s.OutboxRAW:
 			// Send RAW packet from SMPPPacket.Body
 			n, err := s.conn.Write(p)
 			if err != nil {
 				// BREAK CONNECTION
-				fmt.Println("[", s.SessionID, "]#> processOutboxRAW() - error writing Outbox [", n, "bytes]")
+				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox", "action": "write", "count": n}).Info("OutboxRAW: error writing to socket")
 				return
 			}
-			if s.DebugLevel > 1 {
-				fmt.Println("[", s.SessionID, "]#> outBoxRAW sent ", n, "bytes")
-			}
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox", "action": "write", "count": n}).Trace("OutboxRAW: sent to socket")
 
 		case <-s.Closed:
 			fmt.Println("[", s.SessionID, "]# Closing outbox processor")
@@ -355,11 +369,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 			}
 		}
 		log.WithFields(log.Fields{"type": "smpp", "service": "PacketLoop", "SID": s.SessionID, "action": fmt.Sprintf("%x (%s)", p.Hdr.ID, CmdName(p.Hdr.ID)), "Seq": p.Hdr.Seq, "Len": p.Hdr.Len}).Trace(fmt.Sprintf("%x", buf[0:p.Hdr.Len-16]))
-		/*
-			if s.DebugLevel > 2 {
-				fmt.Printf("[ %d ][%d] libsmpp: Received CMD: [%x (%s)][size: %d][%x]\n", s.SessionID, p.Hdr.Seq, p.Hdr.ID, libsmpp.CmdName(p.Hdr.ID), p.Hdr.Len, buf)
-			}
-		*/
+
 		// Fill packet body
 		p.BodyLen = p.Hdr.Len - 16
 		p.Body = make([]byte, p.BodyLen)

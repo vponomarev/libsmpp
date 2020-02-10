@@ -1,0 +1,12 @@
+# Loglevel: trace / debug / info / warning / error / fatal / panic
+logLevel: debug
+#logLevel: trace
+
+# Remote IP:port
+remote: 192.168.4.105:2500
+
+# Bind parameters
+bind:
+  systemID: test
+  systemType: test
+  password: test

@@ -265,4 +265,57 @@ func TestEncodeEnquireLink(t *testing.T) {
 			g.Assert(rP.Body).Equal(expected)
 		})
 	})
+
+	g.Describe("SUBMIT_SM: EncodeSubmitSm() function test", func() {
+		g.It("Input data validation", func() {
+			s := SMPPSession{}
+			input := SMPPSubmit{
+				ServiceType: "ThisIsLongServiceType",
+			}
+			_, eRrr := s.EncodeSubmitSm(input)
+			g.Assert(eRrr).Equal(fmt.Errorf("Invalid length of [service_type]: 21, maxLen = 5"))
+
+			input = SMPPSubmit{
+				Source: SMPPAddress{
+					Addr: "AddressIsTooLong789012",
+				},
+			}
+
+			_, eRrr = s.EncodeSubmitSm(input)
+			g.Assert(eRrr).Equal(fmt.Errorf("Invalid length of [source_addr]: 22, maxLen = 20"))
+
+		})
+
+		g.It("Packet encode", func() {
+			s := SMPPSession{}
+			input := SMPPSubmit{
+				ServiceType: "VDX",
+				Source: SMPPAddress{
+					5,
+					2,
+					"InfoAddrSt",
+				},
+				Dest: SMPPAddress{
+					1,
+					0,
+					"79031234567",
+				},
+				ESMClass:              0x23,
+				ProtocolID:            0x7d,
+				PriorityFlag:          0xde,
+				ScheduledDeliveryTime: "1234567890123456",
+				ValidityPeriod:        "6543210987654321",
+				RegisteredDelivery:    0x55,
+				ReplaceIfPresent:      0x66,
+				DataCoding:            0x77,
+				SmDefaultMsgID:        0x88,
+				ShortMessages:         "Test Message For SubmitSM coding",
+			}
+			expected := []byte("VDX\x00\x05\x02InfoAddrSt\x00\x01\x0079031234567\x00\x23\x7d\xde1234567890123456\x006543210987654321\x00\x55\x66\x77\x88\x20Test Message For SubmitSM coding\x00")
+			rP, eRrr := s.EncodeSubmitSm(input)
+			g.Assert(eRrr).Equal(nil)
+			g.Assert(rP.Hdr.ID).Equal(uint32(0x04))
+			g.Assert(rP.Body).Equal(expected)
+		})
+	})
 }

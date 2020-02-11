@@ -280,3 +280,127 @@ func (s *SMPPSession) EncodeBind(m ConnSMPPMode, b SMPPBind) (p SMPPPacket, err 
 
 	return p, nil
 }
+
+// Input:
+// ss SMPPSubmit - structure for SubmitSM
+// Output:
+// p SMPPPacket - encoded SMPP packet
+// c uint32 - SMPP Error code if present
+// err error - error description
+func (s *SMPPSession) EncodeSubmitSm(ss SMPPSubmit) (p SMPPPacket, err error) {
+	// Validate max entity len
+	if len(ss.ServiceType) > 5 {
+		return SMPPPacket{}, fmt.Errorf("Invalid length of [service_type]: %d, maxLen = 5", len(ss.ServiceType))
+	}
+	if len(ss.Source.Addr) > 20 {
+		return SMPPPacket{}, fmt.Errorf("Invalid length of [source_addr]: %d, maxLen = 20", len(ss.Source.Addr))
+	}
+	if len(ss.Dest.Addr) > 20 {
+		return SMPPPacket{}, fmt.Errorf("Invalid length of [dest_addr]: %d, maxLen = 20", len(ss.Dest.Addr))
+	}
+	if len(ss.ScheduledDeliveryTime) > 16 {
+		return SMPPPacket{}, fmt.Errorf("Invalid length of [scheduled_delivery_time]: %d, maxLen = 16", len(ss.ScheduledDeliveryTime))
+	}
+	if len(ss.ValidityPeriod) > 16 {
+		return SMPPPacket{}, fmt.Errorf("Invalid length of [validity_period]: %d, maxLen = 16", len(ss.ValidityPeriod))
+	}
+	if len(ss.ShortMessages) > 254 {
+		return SMPPPacket{}, fmt.Errorf("Invalid length of [short_message]: %d, maxLen = 254", len(ss.ShortMessages))
+	}
+
+	//
+	// Generate packet
+	buf := make([]byte, MaxSMPPPacketSize)
+	offset := 0
+
+	// ServiceType
+	copy(buf, ss.ServiceType)
+	offset += len(ss.ServiceType)
+	buf[offset] = 0
+	offset++
+
+	// Source Address TON
+	buf[offset] = ss.Source.TON
+	offset++
+
+	// Source Address NPI
+	buf[offset] = ss.Source.NPI
+	offset++
+
+	// Source Addr
+	copy(buf[offset:], ss.Source.Addr)
+	offset += len(ss.Source.Addr)
+	buf[offset] = 0
+	offset++
+
+	// Dest Address TON
+	buf[offset] = ss.Dest.TON
+	offset++
+
+	// Dest Address NPI
+	buf[offset] = ss.Dest.NPI
+	offset++
+
+	// Dest Addr
+	copy(buf[offset:], ss.Dest.Addr)
+	offset += len(ss.Dest.Addr)
+	buf[offset] = 0
+	offset++
+
+	// ESM Class
+	buf[offset] = ss.ESMClass
+	offset++
+
+	// Protocol ID
+	buf[offset] = ss.ProtocolID
+	offset++
+
+	// Priority Flag
+	buf[offset] = ss.PriorityFlag
+	offset++
+
+	// Scheduled Delivery Time
+	copy(buf[offset:], ss.ScheduledDeliveryTime)
+	offset += len(ss.ScheduledDeliveryTime)
+	buf[offset] = 0
+	offset++
+
+	// Validity Period
+	copy(buf[offset:], ss.ValidityPeriod)
+	offset += len(ss.ValidityPeriod)
+	buf[offset] = 0
+	offset++
+
+	// Registered Delivery
+	buf[offset] = ss.RegisteredDelivery
+	offset++
+
+	// Replace If Present
+	buf[offset] = ss.ReplaceIfPresent
+	offset++
+
+	// Data Coding
+	buf[offset] = ss.DataCoding
+	offset++
+
+	// SM Default MSG ID
+	buf[offset] = ss.SmDefaultMsgID
+	offset++
+
+	// SM Length
+	buf[offset] = uint8(len(ss.ShortMessages))
+	offset++
+
+	// Short Message
+	copy(buf[offset:], ss.ShortMessages)
+	offset += len(ss.ShortMessages)
+	buf[offset] = 0
+	offset++
+
+	p.Body = buf[0:offset]
+	p.BodyLen = uint32(offset)
+
+	p.Hdr.ID = libsmpp.CMD_SUBMIT_SM
+	// DONE!
+	return
+}

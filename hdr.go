@@ -239,19 +239,17 @@ type SMPPTracking struct {
 // TLV Code
 type TLVCode uint32
 
+type SMPPAddress struct {
+	TON  uint8  // source_addr_ton
+	NPI  uint8  // source_addr_npi
+	Addr string // source_addr C-Octet-String (max 21)
+}
+
 // SUBMIT_SM structure
 type SMPPSubmit struct {
-	ServiceType string   // service_type C-Octet-String (max 6)
-	Source      struct { // Source Address structure
-		TON  uint8  // source_addr_ton
-		NPI  uint8  // source_addr_npi
-		Addr string // source_addr C-Octet-String (max 21)
-	}
-	Dest struct {
-		TON  uint8  // dest_addr_ton
-		NPI  uint8  // dest_addr_npi
-		Addr string // destination_addr C-Octet-String (max 21)
-	}
+	ServiceType           string // service_type C-Octet-String (max 6)
+	Source                SMPPAddress
+	Dest                  SMPPAddress
 	ESMClass              uint8  // esm_class
 	ProtocolID            uint8  // protocol_id
 	PriorityFlag          uint8  // priority_flag

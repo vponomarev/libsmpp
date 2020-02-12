@@ -3,10 +3,33 @@ logLevel: debug
 #logLevel: trace
 
 # Remote IP:port
-remote: 192.168.4.105:2500
+remote: 192.168.4.98:2775
 
 # Bind parameters
 bind:
   systemID: test
   systemType: test
   password: test
+
+# Message submission parameters
+message:
+  from:
+    ton: 5
+    npi: 0
+    addr: ThisIsMe
+  to:
+    ton: 1
+    npi: 1
+    addr: 79032496449
+  registeredDelivery: 1
+  dataCoding: 1
+  body: "This is message for sending"
+
+# Number of messages to send
+count: 1
+
+# Submission rate
+rate: 100
+
+# Submission TX window
+window: 1

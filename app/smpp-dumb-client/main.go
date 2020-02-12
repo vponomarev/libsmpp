@@ -19,6 +19,25 @@ type Config struct {
 		SystemType string `yaml:"systemType,omitempty"`
 		Password   string `yaml:"password,omitempty"`
 	}
+	Message struct {
+		From struct {
+			TON  int    `yaml:"ton"`
+			NPI  int    `yaml:"npi"`
+			Addr string `yaml:"addr"`
+		}
+		To struct {
+			TON  int    `yaml:"ton"`
+			NPI  int    `yaml:"npi"`
+			Addr string `yaml:"addr"`
+		}
+		RegisteredDelivery int    `yaml:"registeredDelivery"`
+		DataCoding         int    `yaml:"dataCoding"`
+		Body               string `yaml:"body"`
+	}
+
+	SendCount  int `yaml:"count"`
+	SendRate   int `yaml:"rate"`
+	SendWindow int `yaml:"window"`
 }
 
 func main() {
@@ -67,6 +86,34 @@ func main() {
 		log.WithFields(log.Fields{"type": "smpp-client"}).Error("Invalid destination Port:", remote[1])
 	}
 
+	// Init SMPP Session
+	s := &libsmpp.SMPPSession{
+		SessionID: 1,
+	}
+	s.Init()
+
+	// Prepare SUBMIT_SM packet if specified
+	// Encode packet
+	rP, rErr := s.EncodeSubmitSm(libsmpp.SMPPSubmit{
+		ServiceType: "",
+		Source: libsmpp.SMPPAddress{
+			TON:  uint8(config.Message.From.TON),
+			NPI:  uint8(config.Message.From.NPI),
+			Addr: config.Message.From.Addr,
+		},
+		Dest: libsmpp.SMPPAddress{
+			TON:  uint8(config.Message.To.TON),
+			NPI:  uint8(config.Message.To.NPI),
+			Addr: config.Message.To.Addr,
+		},
+		ShortMessages:      config.Message.Body,
+		RegisteredDelivery: uint8(config.Message.RegisteredDelivery),
+	})
+	if rErr != nil {
+		fmt.Println("Error encoding packet body")
+		return
+	}
+
 	dest := &net.TCPAddr{IP: remoteIP, Port: int(remotePort)}
 	log.WithFields(log.Fields{"type": "smpp-client", "remoteIP": dest}).Info("Connecting to")
 	conn, err := net.DialTCP("tcp", nil, dest)
@@ -74,11 +121,6 @@ func main() {
 		log.WithFields(log.Fields{"type": "smpp-client", "service": "outConnect", "remoteIP": dest}).Error("Cannot connect to")
 		return
 	}
-
-	s := &libsmpp.SMPPSession{
-		SessionID: 1,
-	}
-	s.Init()
 
 	go s.RunOutgoing(conn, libsmpp.SMPPBind{
 		ConnMode:   libsmpp.CSMPPTRX,
@@ -94,13 +136,17 @@ func main() {
 		case x := <-s.Status:
 			log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "StatusUpdate"}).Warning(x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
 			if x.GetSMPPState() == libsmpp.CSMPPBound {
-				// Pass session to SessionPool
-				//pool.RegisterSession(s)
-				//return
+
+				// Send packet
+				log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "SendPacket"}).Info("-")
+				s.Outbox <- rP
 			}
 
 		case x := <-s.Inbox:
 			log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "Inbox"}).Info(x)
+
+		case x := <-s.InboxR:
+			log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "InboxR"}).Info(x)
 
 		case <-s.Closed:
 			log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "close"}).Warning("Connection is closed")

@@ -197,12 +197,17 @@ type SMPPSession struct {
 		sync.RWMutex
 	}
 
-	TXMaxTimeoutMS uint32 // Maximum time we wait for reply from external platform [ send error confirmation in case of trigger ]
-	RXMaxTimeoutMS uint32 // Max timeout we wait for reply from our buddy (in case of manual confirmation) [ send confirmation to peer in case of trigger ]
+	TXMaxTimeoutMS          uint32 // Maximum time we wait for reply from external platform [ send error confirmation in case of trigger ]
+	RXMaxTimeoutMS          uint32 // Max timeout we wait for reply from our buddy (in case of manual confirmation) [ send confirmation to peer in case of trigger ]
+	TimeoutSubmitErrorCode  uint32 // Error code for SubmitSM packet in case of timeout
+	TimeoutDeliverErrorCode uint32 // Error code for DeliverSM packet in case of timeout
 
+	// Tracking RESP for TX (sent out) and RX (received) packets
+	winMutex sync.RWMutex
+	TrackTX  map[uint32]SMPPTracking
+	TrackRX  map[uint32]SMPPTracking
 	RXWindow uint32
 	TXWindow uint32
-	winMutex sync.RWMutex
 
 	// Channel for INCOMING packets (SUBMIT_SM/DELIVER_SM/CANCEL_SM/REPLACE_SM/QUERY_SM)
 	Inbox chan SMPPPacket
@@ -222,10 +227,6 @@ type SMPPSession struct {
 	ManualBindValidate bool
 
 	DebugLevel uint
-
-	// Tracking RESP for TX (sent out) and RX (received) packets
-	TrackTX map[uint32]SMPPTracking
-	TrackRX map[uint32]SMPPTracking
 }
 
 type SMPPTracking struct {

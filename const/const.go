@@ -39,12 +39,25 @@ const (
 	ESME_RINVCMDID  = 0x00000003
 	ESME_RINVBNDSTS = 0x00000004
 	ESME_RALYBND    = 0x00000005
+
+	ESME_RSUBMITFAIL = 0x00000045 // submit_sm or submit_multi failed
+	ESME_RX_T_APPN   = 0x00000064 // ESME Receiver Temporary App Error Code
 )
 
 // Default timeouts
 const (
-	TX_MAX_TIMEOUT_MS = 10000
-	RX_MAX_TIMEOUT_MS = 10000
+	// Maximum timeout for SENT requests
+	// Generate internal `timeout` event if triggered
+	TX_MAX_TIMEOUT_MS = 7000
+	// Maximum timeout for RECEIVED requests
+	// Generate outgoing `timeou` event if triggered
+	RX_MAX_TIMEOUT_MS = 5000
+
+	// Default error code for SMPP SubmitSM packet
+	SMPP_TIMEOUT_SUBMIT_ERROR_CODE = ESME_RSUBMITFAIL
+
+	// Default error code for SMPP DeliverSM packet
+	SMPP_TIMEOUT_DELIVER_ERROR_CODE = ESME_RX_T_APPN
 )
 
 // TLV Codes

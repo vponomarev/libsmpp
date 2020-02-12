@@ -394,8 +394,6 @@ func (s *SMPPSession) EncodeSubmitSm(ss SMPPSubmit) (p SMPPPacket, err error) {
 	// Short Message
 	copy(buf[offset:], ss.ShortMessages)
 	offset += len(ss.ShortMessages)
-	buf[offset] = 0
-	offset++
 
 	p.Body = buf[0:offset]
 	p.BodyLen = uint32(offset)

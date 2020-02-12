@@ -46,6 +46,14 @@ func (s *SMPPSession) Init() {
 		s.RXMaxTimeoutMS = libsmpp.RX_MAX_TIMEOUT_MS
 	}
 
+	if s.TimeoutSubmitErrorCode == 0 {
+		s.TimeoutSubmitErrorCode = libsmpp.SMPP_TIMEOUT_SUBMIT_ERROR_CODE
+	}
+
+	if s.TimeoutDeliverErrorCode == 0 {
+		s.TimeoutDeliverErrorCode = libsmpp.SMPP_TIMEOUT_DELIVER_ERROR_CODE
+	}
+
 	// Allocate map for packet tracking
 	s.TrackRX = make(map[uint32]SMPPTracking, 100)
 	s.TrackTX = make(map[uint32]SMPPTracking, 100)
@@ -102,25 +110,47 @@ func (s *SMPPSession) bindTimeouter(t int) {
 // Packet expiration tracker
 func (s *SMPPSession) trackPacketTimeout() {
 	tk := time.NewTicker(500 * time.Millisecond)
-	select {
-	case <-tk.C:
-		// TODO
-		// 1. Search for expired packets
-		s.winMutex.RLock()
-		for k, v := range s.TrackRX {
-			if time.Since(v.T) > time.Duration(s.RXMaxTimeoutMS)*time.Millisecond {
-				fmt.Println("#", k, " - Expired RX packet")
-			}
-		}
-		for k, v := range s.TrackTX {
-			if time.Since(v.T) > time.Duration(s.TXMaxTimeoutMS)*time.Millisecond {
-				fmt.Println("#", k, " - Expired RX packet")
-			}
-		}
-		s.winMutex.RUnlock()
+	for {
+		select {
+		case <-tk.C:
+			// TODO
+			// 1. Search for expired packets
+			s.winMutex.RLock()
+			// fmt.Println("trackPacketTimeout TICK [", len(s.TrackRX), ", ", len(s.TrackTX), "]")
+			for k, v := range s.TrackRX {
+				if time.Since(v.T) > time.Duration(s.RXMaxTimeoutMS)*time.Millisecond {
+					log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "TimeoutTracker", "action": "RX", "packet": k}).Warning("RX Timeout")
 
-	case <-s.Closed:
-		return
+					// Generate reply packet
+					switch v.CommandID {
+					case libsmpp.CMD_DELIVER_SM:
+						p := s.EncodeDeliverSmResp(SMPPPacket{Hdr: SMPPHeader{ID: v.CommandID, Seq: v.SeqNo}, SeqComplete: true}, s.TimeoutDeliverErrorCode)
+						s.Outbox <- p
+					case libsmpp.CMD_SUBMIT_SM:
+						p := s.EncodeSubmitSmResp(SMPPPacket{Hdr: SMPPHeader{ID: v.CommandID, Seq: v.SeqNo}, SeqComplete: true}, s.TimeoutSubmitErrorCode, "")
+						s.Outbox <- p
+					default:
+						log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "TimeoutTracker", "action": "RX", "packet": k}).Info("RX Timeout - unsupported CommandID: ", v.CommandID)
+					}
+					// Delete record from tracking
+					delete(s.TrackRX, k)
+				}
+			}
+			for k, v := range s.TrackTX {
+				if time.Since(v.T) > time.Duration(s.TXMaxTimeoutMS)*time.Millisecond {
+					fmt.Println("#", k, " - Expired RX packet")
+
+					// TODO - Implement TX timeout behaviour, have to send Timeouted notification to InboxR
+
+					// Delete record from tracking
+					delete(s.TrackTX, k)
+				}
+			}
+			s.winMutex.RUnlock()
+
+		case <-s.Closed:
+			return
+		}
 	}
 }
 
@@ -445,7 +475,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 			s.reportStateS(connState{ts: CTCPIncoming, ss: CSMPPBound}, nil, nil)
 
 			// Start tracking packet expiration
-			s.trackPacketTimeout()
+			go s.trackPacketTimeout()
 
 			// Start ENQUIRE_LINK Generator
 			go s.enquireSender(10)
@@ -465,6 +495,9 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 					// Report Bound state
 					s.reportStateS(connState{ss: CSMPPBound}, nil, nil)
 					s.Bind.SMSCID = sid
+
+					// Start tracking packet expiration
+					go s.trackPacketTimeout()
 
 					// Start ENQUIRE_LINK Generator
 					go s.enquireSender(10)

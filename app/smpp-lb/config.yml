@@ -1,3 +1,11 @@
+# Server configuration
 server:
+  # Listen port
   port: 2775
 
+# Logging configuration
+logging:
+  # Server connection
+  server:
+    # Incoming Rate (yes/no)
+    rate: no

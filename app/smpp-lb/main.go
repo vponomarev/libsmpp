@@ -18,6 +18,11 @@ type Config struct {
 	Server struct {
 		Port int
 	}
+	Logging struct {
+		Server struct {
+			Rate bool
+		}
+	}
 }
 
 func doStop() bool {
@@ -30,7 +35,7 @@ func doStop() bool {
 	return false
 }
 
-func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool) {
+func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config Config) {
 
 	// Allocate new SMPP Session structure
 	s := &libsmpp.SMPPSession{
@@ -45,27 +50,29 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool) {
 	var msgID uint
 	msgID = 1
 
-	go func(msgID *uint, s *libsmpp.SMPPSession) {
-		var sv uint
-		sv = 0
-		c := time.Tick(1000 * time.Millisecond)
-		for {
+	if config.Logging.Server.Rate {
 
-			select {
-			case <-c:
-				sn := *msgID
-				if sn > sv {
-					fmt.Println("[", s.SessionID, "] During last 1s: ", (sn - sv))
-					sv = sn
-				} else {
-					fmt.Println("[", s.SessionID, "] During last 1s: -")
+		go func(msgID *uint, s *libsmpp.SMPPSession) {
+			var sv uint
+			sv = 0
+			c := time.Tick(1000 * time.Millisecond)
+			for {
+
+				select {
+				case <-c:
+					sn := *msgID
+					if sn > sv {
+						fmt.Println("[", s.SessionID, "] During last 1s: ", (sn - sv))
+						sv = sn
+					} else {
+						fmt.Println("[", s.SessionID, "] During last 1s: -")
+					}
+				case <-s.Closed:
+					return
 				}
-			case <-s.Closed:
-				return
 			}
-		}
-	}(&msgID, s)
-
+		}(&msgID, s)
+	}
 	for {
 		select {
 		// Request for BIND validation
@@ -148,7 +155,7 @@ func main() {
 			return
 		}
 		log.WithFields(log.Fields{"type": "smpp-lb", "remoteIP": conn.RemoteAddr().String()}).Warning("Received incoming conneciton")
-		go hConn(id, conn, &pool)
+		go hConn(id, conn, &pool, config)
 	}
 }
 

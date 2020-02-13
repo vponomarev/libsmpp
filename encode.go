@@ -282,12 +282,12 @@ func (s *SMPPSession) EncodeBind(m ConnSMPPMode, b SMPPBind) (p SMPPPacket, err 
 }
 
 // Input:
-// ss SMPPSubmit - structure for SubmitSM
+// ss SMPPSubmit - structure for SubmitSM/DeliverSM
 // Output:
 // p SMPPPacket - encoded SMPP packet
 // c uint32 - SMPP Error code if present
 // err error - error description
-func (s *SMPPSession) EncodeSubmitSm(ss SMPPSubmit) (p SMPPPacket, err error) {
+func (s *SMPPSession) EncodeSubmitDeliverSm(CMD uint32, ss SMPPSubmit) (p SMPPPacket, err error) {
 	// Validate max entity len
 	if len(ss.ServiceType) > 5 {
 		return SMPPPacket{}, fmt.Errorf("Invalid length of [service_type]: %d, maxLen = 5", len(ss.ServiceType))
@@ -306,6 +306,13 @@ func (s *SMPPSession) EncodeSubmitSm(ss SMPPSubmit) (p SMPPPacket, err error) {
 	}
 	if len(ss.ShortMessages) > 254 {
 		return SMPPPacket{}, fmt.Errorf("Invalid length of [short_message]: %d, maxLen = 254", len(ss.ShortMessages))
+	}
+
+	switch CMD {
+	case libsmpp.CMD_SUBMIT_SM, libsmpp.CMD_DELIVER_SM:
+		p.Hdr.ID = libsmpp.CMD_SUBMIT_SM
+	default:
+		return SMPPPacket{}, fmt.Errorf("Invalid CommandID: %x", CMD)
 	}
 
 	//
@@ -398,7 +405,14 @@ func (s *SMPPSession) EncodeSubmitSm(ss SMPPSubmit) (p SMPPPacket, err error) {
 	p.Body = buf[0:offset]
 	p.BodyLen = uint32(offset)
 
-	p.Hdr.ID = libsmpp.CMD_SUBMIT_SM
 	// DONE!
 	return
+}
+
+func (s *SMPPSession) EncodeSubmitSm(ss SMPPSubmit) (p SMPPPacket, err error) {
+	return s.EncodeSubmitDeliverSm(libsmpp.CMD_SUBMIT_SM, ss)
+}
+
+func (s *SMPPSession) EncodeDeliverSm(ss SMPPSubmit) (p SMPPPacket, err error) {
+	return s.EncodeSubmitDeliverSm(libsmpp.CMD_DELIVER_SM, ss)
 }

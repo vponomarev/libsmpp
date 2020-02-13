@@ -266,7 +266,7 @@ func TestEncodeEnquireLink(t *testing.T) {
 		})
 	})
 
-	g.Describe("SUBMIT_SM: EncodeSubmitSm() function test", func() {
+	g.Describe("SUBMIT_SM/DELIVER_SM: EncodeSubmitDeliverSm() function test", func() {
 		g.It("Input data validation", func() {
 			s := SMPPSession{}
 			input := SMPPSubmit{
@@ -283,6 +283,15 @@ func TestEncodeEnquireLink(t *testing.T) {
 
 			_, eRrr = s.EncodeSubmitSm(input)
 			g.Assert(eRrr).Equal(fmt.Errorf("Invalid length of [source_addr]: 22, maxLen = 20"))
+
+			input = SMPPSubmit{
+				Source: SMPPAddress{
+					Addr: "Addr",
+				},
+			}
+
+			_, eRrr = s.EncodeSubmitDeliverSm(libsmpp.CMD_BIND_TRANSCIEVER, input)
+			g.Assert(eRrr).Equal(fmt.Errorf("Invalid CommandID: 9"))
 
 		})
 
@@ -312,7 +321,7 @@ func TestEncodeEnquireLink(t *testing.T) {
 				ShortMessages:         "Test Message For SubmitSM coding",
 			}
 			expected := []byte("VDX\x00\x05\x02InfoAddrSt\x00\x01\x0079031234567\x00\x23\x7d\xde1234567890123456\x006543210987654321\x00\x55\x66\x77\x88\x20Test Message For SubmitSM coding")
-			rP, eRrr := s.EncodeSubmitSm(input)
+			rP, eRrr := s.EncodeSubmitDeliverSm(libsmpp.CMD_SUBMIT_SM, input)
 			g.Assert(eRrr).Equal(nil)
 			g.Assert(rP.Hdr.ID).Equal(uint32(0x04))
 			g.Assert(rP.Body).Equal(expected)

@@ -4,3 +4,9 @@ port: 2500
 logLevel: debug
 #logLevel: trace
 
+# Logging configuration
+logging:
+  # Server connection
+  server:
+    # Incoming Rate (yes/no)
+    rate: no

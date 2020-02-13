@@ -6,6 +6,7 @@ import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"libsmpp"
+	libsmppConst "libsmpp/const"
 	"net"
 	"os"
 	"strconv"
@@ -144,6 +145,11 @@ func main() {
 
 		case x := <-s.Inbox:
 			log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "Inbox"}).Info(x)
+
+			// Generate confirmation for DeliverSM
+			if x.Hdr.ID == libsmppConst.CMD_DELIVER_SM {
+				s.Outbox <- s.EncodeDeliverSmResp(x, libsmppConst.ESME_ROK)
+			}
 
 		case x := <-s.InboxR:
 			log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "InboxR"}).Info(x)

@@ -14,6 +14,11 @@ import (
 type Config struct {
 	Port     int    `yaml:"port,omitempty"`
 	LogLevel string `yaml:"logLevel,omitempty"`
+	Logging  struct {
+		Server struct {
+			Rate bool
+		}
+	}
 }
 
 type Params struct {
@@ -113,11 +118,11 @@ func main() {
 			return
 		}
 		log.WithFields(log.Fields{"type": "smpp-server", "remoteIP": conn.RemoteAddr().String()}).Warning("Received incoming connectiton")
-		go hConn(id, conn)
+		go hConn(id, conn, config)
 	}
 }
 
-func hConn(id uint32, conn *net.TCPConn) {
+func hConn(id uint32, conn *net.TCPConn, config Config) {
 	// Allocate new SMPP Session structure
 	s := &libsmpp.SMPPSession{
 		ManualBindValidate: true,
@@ -143,7 +148,7 @@ func hConn(id uint32, conn *net.TCPConn) {
 			log.WithFields(log.Fields{"type": "smpp-server", "SID": s.SessionID, "service": "inConnect", "action": "StatusUpdate"}).Info(x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
 			if x.GetSMPPState() == libsmpp.CSMPPBound {
 				// Pass session to SessionPool
-				sessionProcessor(s)
+				sessionProcessor(s, config)
 				return
 			}
 
@@ -154,30 +159,32 @@ func hConn(id uint32, conn *net.TCPConn) {
 	}
 }
 
-func sessionProcessor(s *libsmpp.SMPPSession) {
+func sessionProcessor(s *libsmpp.SMPPSession, config Config) {
 	var msgID uint32
 	msgID = 1
 
-	go func(msgID *uint32, s *libsmpp.SMPPSession) {
-		var sv uint32
-		sv = 0
-		c := time.Tick(1000 * time.Millisecond)
-		for {
+	if config.Logging.Server.Rate {
+		go func(msgID *uint32, s *libsmpp.SMPPSession) {
+			var sv uint32
+			sv = 0
+			c := time.Tick(1000 * time.Millisecond)
+			for {
 
-			select {
-			case <-c:
-				sn := *msgID
-				if sn > sv {
-					fmt.Println("[", s.SessionID, "] During last 1s: ", (sn - sv), " [MAX:", sn, "]")
-					sv = sn
-				} else {
-					fmt.Println("[", s.SessionID, "] During last 1s: -")
+				select {
+				case <-c:
+					sn := *msgID
+					if sn > sv {
+						fmt.Println("[", s.SessionID, "] During last 1s: ", (sn - sv), " [MAX:", sn, "]")
+						sv = sn
+					} else {
+						fmt.Println("[", s.SessionID, "] During last 1s: -")
+					}
+				case <-s.Closed:
+					return
 				}
-			case <-s.Closed:
-				return
 			}
-		}
-	}(&msgID, s)
+		}(&msgID, s)
+	}
 
 	for {
 		select {
@@ -186,9 +193,32 @@ func sessionProcessor(s *libsmpp.SMPPSession) {
 
 			// Confirm packet
 			pR := s.EncodeSubmitSmResp(p, 0, fmt.Sprintf("%06x", msgID))
+			s.Outbox <- pR
 			msgID++
 
-			s.Outbox <- pR
+			// Generate DELIVERY REPORT in a separate go thread
+			go func(p libsmpp.SMPPPacket) {
+				pD, perr := s.DecodeSubmitDeliverSm(&p)
+				if perr != nil {
+					return
+				}
+				// SWAP Source <=> Dest
+				ax := pD.Source
+				pD.Source = pD.Dest
+				pD.Dest = ax
+
+				// Fill Message Text
+				pD.ShortMessages = "id:1234567890 sub:001 dlvrd:000 submit date:0000000000 done date:0000000000 stat:REJECTD err:000 text:"
+				pE, perr := s.EncodeDeliverSm(pD)
+				if perr != nil {
+					return
+				}
+
+				s.Outbox <- pE
+			}(p)
+
+		case p := <-s.InboxR:
+			log.WithFields(log.Fields{"type": "smpp-server", "service": "PacketLoopR", "SID": s.SessionID, "action": fmt.Sprintf("%x (%s)", p.Hdr.ID, libsmpp.CmdName(p.Hdr.ID)), "Seq": p.Hdr.Seq, "Len": p.Hdr.Len}).Trace(fmt.Sprintf("%x", p.Body))
 
 		case <-s.Closed:
 			return

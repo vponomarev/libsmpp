@@ -125,9 +125,13 @@ func (s *SMPPSession) trackPacketTimeout() {
 					switch v.CommandID {
 					case libsmpp.CMD_DELIVER_SM:
 						p := s.EncodeDeliverSmResp(SMPPPacket{Hdr: SMPPHeader{ID: v.CommandID, Seq: v.SeqNo}, SeqComplete: true}, s.TimeoutDeliverErrorCode)
+						p.IsUntrackable = true
+						log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "TimeoutTracker", "action": "RX", "packet": k}).Info("Send DELIVER_SM_RESP")
 						s.Outbox <- p
 					case libsmpp.CMD_SUBMIT_SM:
 						p := s.EncodeSubmitSmResp(SMPPPacket{Hdr: SMPPHeader{ID: v.CommandID, Seq: v.SeqNo}, SeqComplete: true}, s.TimeoutSubmitErrorCode, "")
+						p.IsUntrackable = true
+						log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "TimeoutTracker", "action": "RX", "packet": k}).Info("Send SUBMIT_SM_RESP")
 						s.Outbox <- p
 					default:
 						log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "TimeoutTracker", "action": "RX", "packet": k}).Info("RX Timeout - unsupported CommandID: ", v.CommandID)
@@ -222,7 +226,7 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 				T:                   time.Now(),
 				UplinkTransactionID: p.UplinkTransactionID,
 			}
-			fmt.Println("[", s.SessionID, "] winTrackEvent(", dir, ")# TrackTX[", p.Hdr.Seq, "] >set UplinkID:", p.UplinkTransactionID)
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "WinTrackTX", "action": "set", "seq": p.Hdr.Seq, "UpTransID": p.UplinkTransactionID}).Debug("Save Data")
 		}
 	case libsmpp.CMD_SUBMIT_SM_RESP, libsmpp.CMD_DELIVER_SM_RESP, libsmpp.CMD_QUERY_SM_RESP, libsmpp.CMD_REPLACE_SM_RESP, libsmpp.CMD_CANCEL_SM_RESP:
 		if dir == CDirIncoming {
@@ -230,16 +234,18 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 			if x, ok := s.TrackTX[p.Hdr.Seq]; ok {
 				// Preserve UplingTransactionID for reply packet
 				p.UplinkTransactionID = x.UplinkTransactionID
-				fmt.Println("[", s.SessionID, "] winTrackEvent(", dir, ")# TrackTX[", p.Hdr.Seq, "] <get UplinkID:", x.UplinkTransactionID)
+				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "WinTrackTX", "action": "get", "seq": p.Hdr.Seq, "UpTransID": x.UplinkTransactionID}).Debug("Get Data")
 
 				// Remove tracking of sent packet
 				delete(s.TrackTX, p.Hdr.Seq)
 			} else {
-				// Received unhandled _RESP packet
-				fmt.Println("[", s.SessionID, "]  winTrackEvent(", dir, ")# TrackTX[", p.Hdr.Seq, "] IS LOST")
+				if !p.IsUntrackable {
+					// Received unhandled _RESP packet
+					log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "WinTrackTX", "action": "get", "state": "lost", "seq": p.Hdr.Seq}).Debug("Drop untracked _RESP packet")
 
-				// Mark, that packet will be duplicated
-				flagDropPacket = true
+					// Mark, that packet will be duplicated
+					flagDropPacket = true
+				}
 			}
 		}
 		if dir == CDirOutgoing {
@@ -248,10 +254,13 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 				// Remove tracking of received packet
 				delete(s.TrackRX, p.Hdr.Seq)
 			} else {
-				fmt.Println("[", s.SessionID, "] winTrackEvent# Incoming # Received untracked Seq=", p.Hdr.Seq, "")
+				if !p.IsUntrackable {
+					// Received unhandled _RESP packet
+					log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "WinTrackRX", "action": "get", "seq": p.Hdr.Seq}).Debug("Drop untracked _RESP packet")
 
-				// Mark, that packet will be duplicated
-				flagDropPacket = true
+					// Mark, that packet will be duplicated
+					flagDropPacket = true
+				}
 			}
 		}
 	}
@@ -478,7 +487,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 			go s.trackPacketTimeout()
 
 			// Start ENQUIRE_LINK Generator
-			go s.enquireSender(10)
+			go s.enquireSender(60)
 
 		// =============================================================
 		// BIND_RECEIVER_RESP/BIND_TRANSMITTER_RESP/BIND_TRANSCIEVER_RESP

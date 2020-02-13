@@ -32,10 +32,11 @@ type SMPPPacket struct {
 	Hdr  SMPPHeader
 	Body []byte
 
-	BodyLen     uint32 // Lenght of the data body
-	SeqComplete bool   // FLAG: SequenceNumber is complete
-	IsReply     bool   // FLAG: This is reply
-	IsDuplicate bool   // FLAG: If this is duplicate confirmation
+	BodyLen       uint32 // Lenght of the data body
+	SeqComplete   bool   // FLAG: SequenceNumber is complete
+	IsReply       bool   // FLAG: This is reply
+	IsDuplicate   bool   // FLAG: If this is duplicate confirmation
+	IsUntrackable bool   // FLAG: If this packet shouldn't be dropped if it is not tracked
 
 	CreateTime          time.Time // Packet origination timestamp
 	UplinkTransactionID uint32

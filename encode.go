@@ -416,3 +416,128 @@ func (s *SMPPSession) EncodeSubmitSm(ss SMPPSubmit) (p SMPPPacket, err error) {
 func (s *SMPPSession) EncodeDeliverSm(ss SMPPSubmit) (p SMPPPacket, err error) {
 	return s.EncodeSubmitDeliverSm(libsmpp.CMD_DELIVER_SM, ss)
 }
+
+func (s *SMPPSession) DecodeSubmitDeliverSm(p *SMPPPacket) (ss SMPPSubmit, err error) {
+	// Validate correct command ID
+	switch p.Hdr.ID {
+	case libsmpp.CMD_SUBMIT_SM, libsmpp.CMD_DELIVER_SM:
+	default:
+		err = fmt.Errorf("Unsupported command ID [%d]", p.Hdr.ID)
+		return
+	}
+
+	// serviceType
+	var l, offset int
+	offset = 0
+	ss.ServiceType, l, err = ReadCString(p.Body[offset:], 6, "service_type")
+	offset += l
+	if err != nil {
+		return
+	}
+
+	if uint32(offset+3) > p.BodyLen {
+		err = fmt.Errorf("Invalid packet, no data for Source Addr Info")
+		return
+	}
+
+	// Source Addr TON
+	ss.Source.TON = p.Body[offset]
+	offset++
+
+	// Source Addr NPI
+	ss.Source.NPI = p.Body[offset]
+	offset++
+
+	// Source Addr NPI
+	ss.Source.Addr, l, err = ReadCString(p.Body[offset:], 21, "source_addr")
+	offset += l
+	if err != nil {
+		return
+	}
+
+	if uint32(offset+3) > p.BodyLen {
+		err = fmt.Errorf("Invalid packet, no data for Dest Addr Info")
+		return
+	}
+
+	// Dest Addr TON
+	ss.Dest.TON = p.Body[offset]
+	offset++
+
+	// Dest Addr NPI
+	ss.Dest.NPI = p.Body[offset]
+	offset++
+
+	// Dest Addr
+	ss.Dest.Addr, l, err = ReadCString(p.Body[offset:], 21, "dest_addr")
+	offset += l
+	if err != nil {
+		return
+	}
+
+	if uint32(offset+4) > p.BodyLen {
+		err = fmt.Errorf("Invalid packet, no data for Scheduled Delivery Time")
+		return
+	}
+
+	ss.ESMClass = p.Body[offset]
+	offset++
+
+	ss.ProtocolID = p.Body[offset]
+	offset++
+
+	ss.PriorityFlag = p.Body[offset]
+	offset++
+
+	// Scheduled delivery time
+	ss.ScheduledDeliveryTime, l, err = ReadCString(p.Body[offset:], 21, "scheduled_delivery_time")
+	offset += l
+	if err != nil {
+		return
+	}
+
+	if uint32(offset+1) > p.BodyLen {
+		err = fmt.Errorf("Invalid packet, no data for Validity Period")
+		return
+	}
+
+	// Validity period
+	ss.ValidityPeriod, l, err = ReadCString(p.Body[offset:], 21, "validity_period")
+	offset += l
+	if err != nil {
+		return
+	}
+
+	if uint32(offset+4) > p.BodyLen {
+		err = fmt.Errorf("Invalid packet, no data for sm_length")
+		return
+	}
+
+	ss.RegisteredDelivery = p.Body[offset]
+	offset++
+
+	ss.ReplaceIfPresent = p.Body[offset]
+	offset++
+
+	ss.DataCoding = p.Body[offset]
+	offset++
+
+	ss.SmDefaultMsgID = p.Body[offset]
+	offset++
+
+	ss.SmLength = p.Body[offset]
+	offset++
+
+	// Load message body
+	if ss.SmLength > 0 {
+		if uint32(offset)+uint32(ss.SmLength) > p.BodyLen {
+			err = fmt.Errorf("Invalid packet, no data for short_message")
+			return
+		}
+		ss.ShortMessages = string(p.Body[offset : offset+int(ss.SmLength)])
+	}
+
+	// TODO: Parse TLV Data
+
+	return
+}

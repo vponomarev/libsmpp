@@ -5,7 +5,6 @@ import (
 	"github.com/franela/goblin"
 	libsmpp "libsmpp/const"
 	"testing"
-	//	"time"
 )
 
 func TestEncodeEnquireLink(t *testing.T) {
@@ -327,4 +326,71 @@ func TestEncodeEnquireLink(t *testing.T) {
 			g.Assert(rP.Body).Equal(expected)
 		})
 	})
+
+	g.Describe("SUBMIT_SM/DELIVER_SM: DecodeSubmitDeliverSm() function test", func() {
+		g.It("Incomplete packet", func() {
+			s := SMPPSession{}
+			input := SMPPPacket{
+				Hdr: SMPPHeader{
+					ID: 0x04,
+				},
+				Body: []byte("VDX\x00\x05\x02InfoAddrSt\x00\x01\x0079031234567\x00\x23\x7d\xde1234567890123456\x006543210987654321\x00\x55\x66\x77\x88\x20Test Message For SubmitSM de.."),
+			}
+			input.BodyLen = uint32(len(input.Body))
+
+			_, eRrr := s.DecodeSubmitDeliverSm(&input)
+			g.Assert(eRrr).Equal(fmt.Errorf("Invalid packet, no data for short_message"))
+
+			input.Body = []byte("VDX\x00\x05\x02InfoAddrSt\x00\x01\x0079031234567\x00\x23\x7d\xde1234567890123456\x00")
+			input.BodyLen = uint32(len(input.Body))
+			_, eRrr = s.DecodeSubmitDeliverSm(&input)
+			g.Assert(eRrr).Equal(fmt.Errorf("Invalid packet, no data for Validity Period"))
+
+			input.Hdr.ID = 0x10
+			_, eRrr = s.DecodeSubmitDeliverSm(&input)
+			g.Assert(eRrr).Equal(fmt.Errorf("Unsupported command ID [16]"))
+
+		})
+
+		g.It("Packet decode", func() {
+			// Test Decode via Encode
+			s := SMPPSession{}
+			input := SMPPSubmit{
+				ServiceType: "VRXD",
+				Source: SMPPAddress{
+					TON:  5,
+					NPI:  0,
+					Addr: "TestSRC",
+				},
+				Dest: SMPPAddress{
+					TON:  1,
+					NPI:  1,
+					Addr: "DestAddrForTest",
+				},
+				ESMClass:              0x24,
+				ProtocolID:            0x31,
+				PriorityFlag:          0xd2,
+				ScheduledDeliveryTime: "1234567890123456",
+				ValidityPeriod:        "6543210987654321",
+				RegisteredDelivery:    0x2f,
+				ReplaceIfPresent:      0xbe,
+				DataCoding:            0x0a,
+				SmDefaultMsgID:        0xd8,
+				ShortMessages:         "This message is used for transcoding",
+			}
+			// Encode packet
+			ep, err := s.EncodeDeliverSm(input)
+			g.Assert(err).Equal(nil)
+
+			// Decode packet
+			ee, err := s.DecodeSubmitDeliverSm(&ep)
+
+			// sm_length is not used during encoding, but is decoded. So, let's fill it manually
+			input.SmLength = uint8(len(input.ShortMessages))
+
+			g.Assert(err).Equal(nil)
+			g.Assert(ee).Equal(input)
+		})
+	})
+
 }

@@ -310,7 +310,7 @@ func (s *SMPPSession) EncodeSubmitDeliverSm(CMD uint32, ss SMPPSubmit) (p SMPPPa
 
 	switch CMD {
 	case libsmpp.CMD_SUBMIT_SM, libsmpp.CMD_DELIVER_SM:
-		p.Hdr.ID = libsmpp.CMD_SUBMIT_SM
+		p.Hdr.ID = CMD
 	default:
 		return SMPPPacket{}, fmt.Errorf("Invalid CommandID: %x", CMD)
 	}

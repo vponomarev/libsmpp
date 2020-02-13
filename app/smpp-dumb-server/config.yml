@@ -9,4 +9,9 @@ logging:
   # Server connection
   server:
     # Incoming Rate (yes/no)
-    rate: no
+    rate: yes
+
+# Response behaviour
+responder:
+  # Generate delivery reports: yes/no
+  deliveryReport: no

@@ -19,6 +19,9 @@ type Config struct {
 			Rate bool
 		}
 	}
+	Responder struct {
+		DeliveryReport bool `yaml:"deliveryReport"`
+	}
 }
 
 type Params struct {
@@ -196,26 +199,28 @@ func sessionProcessor(s *libsmpp.SMPPSession, config Config) {
 			s.Outbox <- pR
 			msgID++
 
-			// Generate DELIVERY REPORT in a separate go thread
-			go func(p libsmpp.SMPPPacket) {
-				pD, perr := s.DecodeSubmitDeliverSm(&p)
-				if perr != nil {
-					return
-				}
-				// SWAP Source <=> Dest
-				ax := pD.Source
-				pD.Source = pD.Dest
-				pD.Dest = ax
+			if config.Responder.DeliveryReport {
+				// Generate DELIVERY REPORT in a separate go thread
+				go func(p libsmpp.SMPPPacket) {
+					pD, perr := s.DecodeSubmitDeliverSm(&p)
+					if perr != nil {
+						return
+					}
+					// SWAP Source <=> Dest
+					ax := pD.Source
+					pD.Source = pD.Dest
+					pD.Dest = ax
 
-				// Fill Message Text
-				pD.ShortMessages = "id:1234567890 sub:001 dlvrd:000 submit date:0000000000 done date:0000000000 stat:REJECTD err:000 text:"
-				pE, perr := s.EncodeDeliverSm(pD)
-				if perr != nil {
-					return
-				}
+					// Fill Message Text
+					pD.ShortMessages = "id:1234567890 sub:001 dlvrd:000 submit date:0000000000 done date:0000000000 stat:REJECTD err:000 text:"
+					pE, perr := s.EncodeDeliverSm(pD)
+					if perr != nil {
+						return
+					}
 
-				s.Outbox <- pE
-			}(p)
+					s.Outbox <- pE
+				}(p)
+			}
 
 		case p := <-s.InboxR:
 			log.WithFields(log.Fields{"type": "smpp-server", "service": "PacketLoopR", "SID": s.SessionID, "action": fmt.Sprintf("%x (%s)", p.Hdr.ID, libsmpp.CmdName(p.Hdr.ID)), "Seq": p.Hdr.Seq, "Len": p.Hdr.Len}).Trace(fmt.Sprintf("%x", p.Body))

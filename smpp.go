@@ -142,7 +142,7 @@ func (s *SMPPSession) trackPacketTimeout() {
 			}
 			for k, v := range s.TrackTX {
 				if time.Since(v.T) > time.Duration(s.TXMaxTimeoutMS)*time.Millisecond {
-					fmt.Println("#", k, " - Expired RX packet")
+					fmt.Println("#", k, " - Expired RX packet (TXlen=", len(s.TrackTX), ")")
 
 					// TODO - Implement TX timeout behaviour, have to send Timeouted notification to InboxR
 

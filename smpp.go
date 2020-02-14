@@ -55,8 +55,16 @@ func (s *SMPPSession) Init() {
 	}
 
 	// Allocate map for packet tracking
-	s.TrackRX = make(map[uint32]SMPPTracking, 100)
-	s.TrackTX = make(map[uint32]SMPPTracking, 100)
+	s.TrackRX = make(map[uint32]SMPPTracking, 1000)
+	s.TrackTX = make(map[uint32]SMPPTracking, 1000)
+}
+
+func (s *SMPPSession) GetTrackQueueSize() (tx int, rx int) {
+	s.winMutex.RLock()
+	tx = len(s.TrackTX)
+	rx = len(s.TrackRX)
+	s.winMutex.RUnlock()
+	return tx, rx
 }
 
 func (s *SMPPSession) Close(origin string) {
@@ -142,7 +150,7 @@ func (s *SMPPSession) trackPacketTimeout() {
 			}
 			for k, v := range s.TrackTX {
 				if time.Since(v.T) > time.Duration(s.TXMaxTimeoutMS)*time.Millisecond {
-					fmt.Println("#", k, " - Expired RX packet (TXlen=", len(s.TrackTX), ")")
+					fmt.Println("#", k, " - Expired TX packet (TXlen=", len(s.TrackTX), ")")
 
 					// TODO - Implement TX timeout behaviour, have to send Timeouted notification to InboxR
 

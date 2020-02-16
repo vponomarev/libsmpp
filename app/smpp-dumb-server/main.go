@@ -150,9 +150,8 @@ func hConn(id uint32, conn *net.TCPConn, config Config) {
 		case x := <-s.Status:
 			log.WithFields(log.Fields{"type": "smpp-server", "SID": s.SessionID, "service": "inConnect", "action": "StatusUpdate"}).Info(x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
 			if x.GetSMPPState() == libsmpp.CSMPPBound {
-				// Pass session to SessionPool
-				sessionProcessor(s, config)
-				return
+				// Pass session to session processor
+				go sessionProcessor(s, config)
 			}
 
 		case <-s.Closed:
@@ -165,6 +164,8 @@ func hConn(id uint32, conn *net.TCPConn, config Config) {
 func sessionProcessor(s *libsmpp.SMPPSession, config Config) {
 	var msgID uint32
 	msgID = 1
+
+	log.WithFields(log.Fields{"type": "smpp-server", "service": "PacketLoop", "SID": s.SessionID, "action": "Start"}).Info("Start message processing")
 
 	if config.Logging.Server.Rate {
 		go func(msgID *uint32, s *libsmpp.SMPPSession) {

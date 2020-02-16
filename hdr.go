@@ -39,6 +39,8 @@ type SMPPPacket struct {
 	IsUntrackable bool   // FLAG: If this packet shouldn't be dropped if it is not tracked
 
 	CreateTime          time.Time // Packet origination timestamp
+	NetSentTime         time.Time // Time, when packet was sent to network
+	NetRespTime         time.Time // Time, when response packet was generated
 	UplinkTransactionID uint32
 }
 
@@ -231,9 +233,10 @@ type SMPPSession struct {
 }
 
 type SMPPTracking struct {
-	SeqNo     uint32    // SMPP Session SeqNo
-	CommandID uint32    // Original SMPP CommandID
-	T         time.Time // Packet origination time
+	SeqNo      uint32    // SMPP Session SeqNo
+	CommandID  uint32    // Original SMPP CommandID
+	T          time.Time // Start tracking time
+	CreateTime time.Time // Original packet track time
 
 	UplinkTransactionID uint32 // Uniq packet ID, provided by UPLINK
 }

@@ -107,7 +107,7 @@ func (s *SMPPSession) bindTimeouter(t int) {
 	select {
 	case <-time.After(time.Duration(t) * time.Second):
 		if s.Cs.GetSMPPState() != CSMPPBound {
-			fmt.Println("[", s.SessionID, "] bindTimeouter(", t, ") Event triggered!")
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "bindTimeouter", "timeout": t}).Info("Timeout raised, closing connection")
 			s.conn.Close()
 		}
 	case <-s.Closed:
@@ -219,9 +219,10 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 
 			// Register new tracking message
 			s.TrackRX[p.Hdr.Seq] = SMPPTracking{
-				SeqNo:     p.Hdr.Seq,
-				CommandID: p.Hdr.ID,
-				T:         time.Now(),
+				SeqNo:      p.Hdr.Seq,
+				CommandID:  p.Hdr.ID,
+				T:          time.Now(),
+				CreateTime: p.CreateTime,
 			}
 		}
 		if dir == CDirOutgoing {
@@ -232,6 +233,7 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 				SeqNo:               p.Hdr.Seq,
 				CommandID:           p.Hdr.ID,
 				T:                   time.Now(),
+				CreateTime:          p.CreateTime,
 				UplinkTransactionID: p.UplinkTransactionID,
 			}
 			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "WinTrackTX", "action": "set", "seq": p.Hdr.Seq, "UpTransID": p.UplinkTransactionID}).Debug("Save Data")
@@ -242,6 +244,8 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 			if x, ok := s.TrackTX[p.Hdr.Seq]; ok {
 				// Preserve UplingTransactionID for reply packet
 				p.UplinkTransactionID = x.UplinkTransactionID
+				p.NetSentTime = x.T
+				p.CreateTime = x.CreateTime
 				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "WinTrackTX", "action": "get", "seq": p.Hdr.Seq, "UpTransID": x.UplinkTransactionID}).Debug("Get Data")
 
 				// Remove tracking of sent packet
@@ -312,7 +316,7 @@ func (s *SMPPSession) processOutbox() {
 			n, err := s.conn.Write(buf)
 			if err != nil {
 				// BREAK CONNECTION
-				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox", "action": "write", "count": n}).Info("Outbox: error writing to socket")
+				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox", "action": "write", "count": n}).Info("Outbox: error writing to socket", err)
 				return
 			}
 			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox", "action": "write", "count": n}).Trace("Outbox: sent to socket")
@@ -322,13 +326,13 @@ func (s *SMPPSession) processOutbox() {
 			n, err := s.conn.Write(p)
 			if err != nil {
 				// BREAK CONNECTION
-				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox", "action": "write", "count": n}).Info("OutboxRAW: error writing to socket")
+				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox", "action": "write", "count": n}).Info("OutboxRAW: error writing to socket", err)
 				return
 			}
 			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox", "action": "write", "count": n}).Trace("OutboxRAW: sent to socket")
 
 		case <-s.Closed:
-			fmt.Println("[", s.SessionID, "]# Closing outbox processor")
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox", "action": "close"}).Info("Closing Outbox processor")
 			return
 		}
 	}
@@ -393,6 +397,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 		// Read packet header
 		if _, err := io.ReadFull(conn, hdrBuf); err != nil {
 			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error reading incoming packet header (16 bytes)!"), err)
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "ReadFull"}).Info("Error reading packet header (16 bytes)!", err)
 			return
 		}
 		// Decode header
@@ -411,6 +416,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 		// Read least part of the packet
 		if p.Hdr.Len > 16 {
 			if _, err := io.ReadFull(conn, buf[0:p.Hdr.Len-16]); err != nil {
+				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "ReadFull"}).Info("Error reading last part of the packet!", err)
 				s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error reading last part of the packet!"), err)
 				return
 			}

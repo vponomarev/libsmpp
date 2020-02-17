@@ -145,11 +145,13 @@ func main() {
 	remoteIP := net.ParseIP(remote[0])
 	if remoteIP == nil {
 		log.WithFields(log.Fields{"type": "smpp-client"}).Error("Invalid destination IP:", remote[0])
+		return
 	}
 
 	remotePort, err := strconv.ParseUint(remote[1], 10, 16)
 	if err != nil {
 		log.WithFields(log.Fields{"type": "smpp-client"}).Error("Invalid destination Port:", remote[1])
+		return
 	}
 
 	// Init SMPP Session

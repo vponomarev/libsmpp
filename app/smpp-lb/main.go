@@ -8,6 +8,8 @@ import (
 	"libsmpp"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -18,10 +20,21 @@ type Config struct {
 	Server struct {
 		Port int
 	}
-	Logging struct {
+	LogLevel string `yaml:"logLevel,omitempty"`
+	Logging  struct {
 		Server struct {
 			Rate bool
 		}
+	}
+	Client struct {
+		Remote string
+	}
+}
+
+type Params struct {
+	LogLevel log.Level
+	Flags    struct {
+		LogLevel bool
 	}
 }
 
@@ -33,6 +46,37 @@ func doStop() bool {
 		close(stopCh)
 	}
 	return false
+}
+
+func ProcessCMDLine() (p Params) {
+	// Set default
+	p.LogLevel = log.InfoLevel
+
+	var pv bool
+	var pvn string
+	for _, param := range os.Args[1:] {
+		if pv {
+			switch pvn {
+			// LogLevel
+			case "-log":
+				l, err := log.ParseLevel(param)
+				if err != nil {
+					l = log.InfoLevel
+					fmt.Print("Incorrect LogLevel [", param, "], set LogLevel to: ", l.String())
+				} else {
+					p.LogLevel = l
+					p.Flags.LogLevel = true
+				}
+			}
+		} else {
+			switch param {
+			case "-log":
+				pvn = param
+				pv = true
+			}
+		}
+	}
+	return p
 }
 
 func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config Config) {
@@ -101,7 +145,10 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config Confi
 }
 
 func main() {
-	//	log.SetFormatter(&log.JSONFormatter{})
+	pParam := ProcessCMDLine()
+
+	fmt.Println("LogLevel:", pParam.LogLevel.String())
+
 	log.SetOutput(os.Stdout)
 	log.SetLevel(log.DebugLevel)
 
@@ -117,11 +164,23 @@ func main() {
 	if err == nil {
 		if err = yaml.Unmarshal(source, &config); err == nil {
 			log.WithFields(log.Fields{
-				"type": "smpp-server",
+				"type": "smpp-lb",
 			}).Info("Loaded configuration file: ", configFileName)
 		} else {
 			fmt.Println("Error loading config file: ", err)
 			return
+		}
+	}
+
+	// Load LogLevel from config if present
+	if (len(config.LogLevel) > 0) && (!pParam.Flags.LogLevel) {
+		if l, err := log.ParseLevel(config.LogLevel); err == nil {
+			pParam.LogLevel = l
+
+			log.SetLevel(pParam.LogLevel)
+			log.WithFields(log.Fields{
+				"type": "smpp-client",
+			}).Warning("Override LogLevel to: ", pParam.LogLevel.String())
 		}
 	}
 
@@ -130,12 +189,32 @@ func main() {
 		config.Server.Port = 2775
 	}
 
+	// Split REMOTE HOST:PORT
+	remote := strings.Split(config.Client.Remote, ":")
+	if len(remote) != 2 {
+		log.WithFields(log.Fields{"type": "smpp-lb"}).Error("Cannot parse remote ip:port (", config.Client.Remote, ")")
+		return
+	}
+
+	remoteIP := net.ParseIP(remote[0])
+	if remoteIP == nil {
+		log.WithFields(log.Fields{"type": "smpp-client"}).Error("Invalid destination IP:", remote[0])
+		return
+	}
+
+	remotePort, err := strconv.ParseUint(remote[1], 10, 16)
+	if err != nil {
+		log.WithFields(log.Fields{"type": "smpp-client"}).Error("Invalid destination Port:", remote[1])
+		return
+	}
+
 	pool := libsmpp.SessionPool{}
 	pool.Init()
 
 	var id uint32 = 1
 
-	go outConnect(id, &pool)
+	dest := &net.TCPAddr{IP: remoteIP, Port: int(remotePort)}
+	go outConnect(id, dest, &pool)
 
 	// Listen socket for new connections
 	lAddr := &net.TCPAddr{IP: net.IPv4(0, 0, 0, 0), Port: config.Server.Port}
@@ -159,13 +238,13 @@ func main() {
 	}
 }
 
-func outConnect(id uint32, pool *libsmpp.SessionPool) {
-	dest := &net.TCPAddr{IP: net.IPv4(172, 21, 211, 199), Port: 2775}
+func outConnect(id uint32, dest *net.TCPAddr, pool *libsmpp.SessionPool) {
 	conn, err := net.DialTCP("tcp", nil, dest)
 	if err != nil {
-		log.WithFields(log.Fields{"type": "smpp-lb", "service": "outConnect", "remoteIP": dest}).Warning("Cannot connect to")
+		log.WithFields(log.Fields{"type": "smpp-lb", "service": "outConnect", "remote": dest}).Warning("Cannot connect to")
 		return
 	}
+	log.WithFields(log.Fields{"type": "smpp-lb", "service": "outConnect", "remote": dest}).Info("TCP Connection established")
 
 	s := &libsmpp.SMPPSession{
 		SessionID: id,

@@ -595,7 +595,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 
 			// Process message and mark if this is duplicated response
 			px.IsDuplicate = s.winTrackEvent(CDirIncoming, px)
-			px.UplinkTransactionID = p.UplinkTransactionID
+			// px.UplinkTransactionID = p.UplinkTransactionID
 
 			s.InboxR <- *px
 

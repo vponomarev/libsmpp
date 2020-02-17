@@ -73,7 +73,7 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 		//
 		case x := <-s.InboxR:
 			// Try to unpark message
-			log.WithFields(log.Fields{"type": "pool", "SID": pe.SessionID, "service": "RegisterSession", "action": "Inbox"}).Info("Incoming QuickReply: ", x)
+			log.WithFields(log.Fields{"type": "pool", "SID": pe.SessionID, "service": "RegisterSession", "action": "Inbox", "UTID": x.UplinkTransactionID}).Info("Incoming QuickReply: ", x)
 
 			// Check if we have parked record
 			if x.UplinkTransactionID > 0 {
@@ -106,7 +106,7 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 				}
 			} else {
 				// No UplinkTransactionID is set
-				fmt.Println("[", pe.SessionID, "] QuickPath REPLY: Reply doesnot contain UplinkTransactionID: ", x)
+				fmt.Println("[", pe.SessionID, "] QuickPath REPLY: Reply does not contain UplinkTransactionID: ", x)
 			}
 
 		case <-s.Closed:
@@ -205,7 +205,7 @@ func (p *SessionPool) QDeliveryManager() {
 	for {
 		select {
 		case pp := <-p.QResp:
-			fmt.Println("[", pp.OrigSessionID, "=>", pp.DestSessionID, "] SP.QDeliveryManager#  packet: ", pp.Packet)
+			fmt.Println("[", pp.OrigSessionID, "=>", pp.DestSessionID, "][UTID:", pp.Packet.UplinkTransactionID, "] SP.QDeliveryManager#  packet: ", pp.Packet)
 
 			destSession := pp.DestSessionID
 

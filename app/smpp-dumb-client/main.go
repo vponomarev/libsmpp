@@ -39,9 +39,9 @@ type Config struct {
 		Body               string `yaml:"body"`
 	}
 
-	SendCount  int `yaml:"count"`
-	SendRate   int `yaml:"rate"`
-	SendWindow int `yaml:"window"`
+	SendCount  uint `yaml:"count"`
+	SendRate   uint `yaml:"rate"`
+	SendWindow uint `yaml:"window"`
 }
 
 type Params struct {
@@ -213,7 +213,7 @@ func main() {
 
 				// Start packet submission
 				log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "SendPacket", "count": config.SendCount, "rate": config.SendRate}).Info("Start message bulk message submission")
-				go PacketSender(s, rP, uint(config.SendRate), uint(config.SendCount), &TimeTracker, SendCompleteCH)
+				go PacketSender(s, rP, config, &TimeTracker, SendCompleteCH)
 			}
 
 		case x := <-s.Inbox:
@@ -251,7 +251,7 @@ func main() {
 }
 
 // Send messages
-func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, rate uint, cnt uint, TimeTracker *TrackProcessingTime, SendCompleteCH chan interface{}) {
+func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, TimeTracker *TrackProcessingTime, SendCompleteCH chan interface{}) {
 	// Sleep for 3s after finishing sending and close trigger channel
 	defer func() {
 		time.Sleep(3 * time.Second)
@@ -264,24 +264,24 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, rate uint, cnt u
 	var blockSize uint
 	var msgLastSec uint
 	// For rate > 100 SMS/sec send send messages each 10 ms
-	if rate > 100 {
+	if config.SendRate > 100 {
 		tick = 10 * time.Millisecond
-		blockSize = rate / 100
+		blockSize = config.SendRate / 100
 		tickInfoModule = 100
-	} else if rate > 10 {
+	} else if config.SendRate > 10 {
 		// For rate > 10 SMS/sec AND <= 100 SMS/sec send messages each 100 ms
 		tick = 100 * time.Millisecond
-		blockSize = rate / 10
+		blockSize = config.SendRate / 10
 		tickInfoModule = 10
-	} else if rate > 1 {
+	} else if config.SendRate > 1 {
 		// For rate > 1 SMS/sec AND <= 10 SMS/sec send message each 500 ms
 		tick = 500 * time.Millisecond
-		blockSize = rate / 2
+		blockSize = config.SendRate / 2
 		tickInfoModule = 2
 	} else {
 		// Rate is 1 SMS/sec
 		tick = 1 * time.Second
-		blockSize = rate
+		blockSize = config.SendRate
 		tickInfoModule = 1
 	}
 
@@ -290,21 +290,39 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, rate uint, cnt u
 	for {
 		select {
 		case <-c:
+
 			tickCouter++
-			var i uint
-			for ; (i < blockSize) && (done < cnt); i++ {
-				p.CreateTime = time.Now()
-				s.Outbox <- p
-				msgLastSec++
-				done++
+
+			// Init block size for current tick
+			tickBlock := blockSize
+
+			// Skip current tick in case of overload
+			txQ, rxQ := s.GetTrackQueueSize()
+			var skipSend bool
+			if config.SendWindow > 0 {
+				if uint(txQ) >= config.SendWindow {
+					skipSend = true
+				}
+				if tickBlock+uint(txQ) > config.SendWindow {
+					tickBlock = config.SendWindow - uint(txQ)
+				}
 			}
-			if done >= cnt {
-				fmt.Println("#Finished sending", cnt, "messages with rate", rate)
+
+			var i uint
+			if !skipSend {
+				for ; (i < tickBlock) && (done < config.SendCount); i++ {
+					p.CreateTime = time.Now()
+					s.Outbox <- p
+					msgLastSec++
+					done++
+				}
+			}
+			if done >= config.SendCount {
+				fmt.Println("#Finished sending", config.SendCount, "messages with rate", config.SendRate)
 				return
 			}
 
 			if tickCouter%tickInfoModule == 0 {
-				tx, rx := s.GetTrackQueueSize()
 				TimeTracker.Lock()
 				tCnt := TimeTracker.Count
 				tDur := TimeTracker.DelayTotal
@@ -317,7 +335,7 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, rate uint, cnt u
 					tAvg = tDur.Microseconds() / int64(tCnt)
 				}
 
-				fmt.Println("[", s.SessionID, "] During last 1s: ", msgLastSec, " [MAX:", done, "][TX:", tx, "][RX:", rx, "][RTDavg micros: ", tAvg, ",", tCnt, "]")
+				fmt.Println("[", s.SessionID, "] During last 1s: ", msgLastSec, " [MAX:", done, "][TX:", txQ, "][RX:", rxQ, "][RTDavg micros: ", tAvg, ",", tCnt, "]")
 				msgLastSec = 0
 			}
 

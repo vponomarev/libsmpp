@@ -38,9 +38,12 @@ type SMPPPacket struct {
 	IsDuplicate   bool   // FLAG: If this is duplicate confirmation
 	IsUntrackable bool   // FLAG: If this packet shouldn't be dropped if it is not tracked
 
-	CreateTime          time.Time // Packet origination timestamp
-	NetSentTime         time.Time // Time, when packet was sent to network
-	NetRespTime         time.Time // Time, when response packet was generated
+	CreateTime  time.Time // Packet origination timestamp
+	NetSentTime time.Time // Time, when packet was sent to network
+
+	// Reply packet extra info
+	OrigTime            time.Time // Time, when original packet was generated
+	NetOrigTime         time.Time // Time, when original packet was sent to network
 	UplinkTransactionID uint32
 }
 
@@ -218,8 +221,9 @@ type SMPPSession struct {
 	// Channel for INCOMING ACK packets (_RESP)
 	InboxR chan SMPPPacket
 
-	// Send outgoing packets
-	Outbox    chan SMPPPacket
+	// Outgoing messages and replies to SMPP link
+	Outbox chan SMPPPacket
+	// Outgoing RAW messages to SMPP link (only BIND_RESP and ENQUIRE_LINK/ENQUIRE_LINK_RESP packets)
 	OutboxRAW chan []byte
 
 	// SMPP Bind validator
@@ -236,7 +240,7 @@ type SMPPTracking struct {
 	SeqNo      uint32    // SMPP Session SeqNo
 	CommandID  uint32    // Original SMPP CommandID
 	T          time.Time // Start tracking time
-	CreateTime time.Time // Original packet track time
+	CreateTime time.Time // Original packet create time
 
 	UplinkTransactionID uint32 // Uniq packet ID, provided by UPLINK
 }

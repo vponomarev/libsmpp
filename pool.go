@@ -30,16 +30,16 @@ func (p *SessionPool) Init() {
 }
 
 func (p *SessionPool) allocateTransactionID() (r uint32) {
-	p.sessionMutex.RLock()
+	p.sessionMutex.Lock()
 	p.maxTransaction++
 	r = p.maxTransaction
-	p.sessionMutex.RUnlock()
+	p.sessionMutex.Unlock()
 	return
 }
 
 // Register SMPPSession in pool
 func (p *SessionPool) RegisterSession(s *SMPPSession) {
-	p.sessionMutex.RLock()
+	p.sessionMutex.Lock()
 	p.maxSessionID++
 
 	pe := &SPEntry{
@@ -50,7 +50,7 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 
 	// Register PoolEntry in slice
 	p.Pool[pe.SessionID] = pe
-	p.sessionMutex.RUnlock()
+	p.sessionMutex.Unlock()
 
 	// Start session traffic processing
 	for {
@@ -73,7 +73,7 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 		//
 		case x := <-s.InboxR:
 			// Try to unpark message
-			log.WithFields(log.Fields{"type": "pool", "SID": pe.SessionID, "service": "RegisterSession", "action": "Inbox", "UTID": x.UplinkTransactionID}).Info("Incoming QuickReply: ", x)
+			log.WithFields(log.Fields{"type": "pool", "SID": pe.SessionID, "service": "RegisterSession", "action": "Inbox", "UTID": x.UplinkTransactionID}).Debug("Incoming QuickReply: ", x)
 
 			// Check if we have parked record
 			if x.UplinkTransactionID > 0 {
@@ -95,9 +95,9 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 					}
 
 					// Delete message from parking map
-					p.trackMutex.RLock()
+					p.trackMutex.Lock()
 					delete(p.Track, pp.Packet.UplinkTransactionID)
-					p.trackMutex.RUnlock()
+					p.trackMutex.Unlock()
 
 					p.QResp <- pp
 				} else {
@@ -113,9 +113,9 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 			fmt.Println("[", pe.SessionID, "] SP.RegisterSession: Session closed")
 
 			// Remove session from pool
-			p.sessionMutex.RLock()
+			p.sessionMutex.Lock()
 			delete(p.Pool, pe.SessionID)
-			p.sessionMutex.RUnlock()
+			p.sessionMutex.Unlock()
 
 			// Return
 			return
@@ -132,7 +132,8 @@ func (p *SessionPool) QManager() {
 			msgID++
 			origSession := pp.OrigSessionID
 
-			fmt.Println("[", origSession, "=>", pp.DestSessionID, "] SP.QManager# [", msgID, "] Incoming packet: ", pp.Packet)
+			log.WithFields(log.Fields{"type": "pool", "SID": origSession, "service": "QManager", "action": "ReadQueue", "MsgID": msgID}).Debug("Incoming packet: ", pp.Packet.Hdr.String())
+			//			fmt.Println("[", origSession, "=>", pp.DestSessionID, "] SP.QManager# [", msgID, "] Incoming packet: ", pp.Packet)
 
 			// ==========================================================
 			// HERE IS ROUTING ENGINE
@@ -163,7 +164,7 @@ func (p *SessionPool) QManager() {
 				pn.Packet.UplinkTransactionID = p.allocateTransactionID()
 
 				// Save tracking information
-				p.trackMutex.RLock()
+				p.trackMutex.Lock()
 				p.Track[pn.Packet.UplinkTransactionID] = PoolPacketTracking{
 					OrigSessionID: pn.OrigSessionID,
 					DestSessionID: pn.DestSessionID,
@@ -171,13 +172,15 @@ func (p *SessionPool) QManager() {
 					TransactionID: pn.Packet.UplinkTransactionID,
 					Packet:        pn.Packet,
 				}
-				p.trackMutex.RUnlock()
+				p.trackMutex.Unlock()
 
-				fmt.Println("[", pp.OrigSessionID, "] Message is routed to: ", destSession)
+				log.WithFields(log.Fields{"type": "pool", "SID": origSession, "service": "QManager", "action": "RouteMessages", "MsgID": msgID, "DestSID": destSession}).Debug("Routed message")
+				//fmt.Println("[", pp.OrigSessionID, "] Message is routed to: ", destSession)
 				p.QResp <- pn
 			} else {
 				// Route undefined
-				fmt.Println("[", pp.OrigSessionID, "] Route is not found, generate self-response")
+				log.WithFields(log.Fields{"type": "pool", "SID": origSession, "service": "QManager", "action": "RouteError", "MsgID": msgID}).Info("Route not found, generate self-response")
+				//fmt.Println("[", pp.OrigSessionID, "] Route is not found, generate self-response")
 				// Generate response [ SELF-RESPONSE ]
 				sx := SMPPSession{}
 
@@ -205,7 +208,8 @@ func (p *SessionPool) QDeliveryManager() {
 	for {
 		select {
 		case pp := <-p.QResp:
-			fmt.Println("[", pp.OrigSessionID, "=>", pp.DestSessionID, "][UTID:", pp.Packet.UplinkTransactionID, "] SP.QDeliveryManager#  packet: ", pp.Packet)
+			log.WithFields(log.Fields{"type": "pool", "SID": pp.OrigSessionID, "service": "QDeliveryManager", "action": "ReadQResp", "DestSID": pp.DestSessionID, "UTID": pp.Packet.UplinkTransactionID}).Debug("Incoming packet: ", pp.Packet.Hdr.String())
+			//fmt.Println("[", pp.OrigSessionID, "=>", pp.DestSessionID, "][UTID:", pp.Packet.UplinkTransactionID, "] SP.QDeliveryManager#  packet: ", pp.Packet)
 
 			destSession := pp.DestSessionID
 
@@ -221,7 +225,8 @@ func (p *SessionPool) QDeliveryManager() {
 			if ps != nil {
 				ps.Outbox <- pp.Packet
 			} else {
-				fmt.Println("[", pp.OrigSessionID, "] SP.QDeliveryManager# CANNOT FIND DESTINATION SESSION")
+				log.WithFields(log.Fields{"type": "pool", "SID": pp.OrigSessionID, "service": "QDeliveryManager", "action": "ReadQRespError", "DestSID": pp.DestSessionID, "UTID": pp.Packet.UplinkTransactionID}).Info("Cannot find destination session")
+				//fmt.Println("[", pp.OrigSessionID, "] SP.QDeliveryManager# CANNOT FIND DESTINATION SESSION")
 			}
 		}
 	}

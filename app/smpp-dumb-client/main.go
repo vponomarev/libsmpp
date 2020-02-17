@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -48,6 +49,14 @@ type Params struct {
 	Flags    struct {
 		LogLevel bool
 	}
+}
+
+type TrackProcessingTime struct {
+	Count      uint
+	DelayMin   time.Duration
+	DelayMax   time.Duration
+	DelayTotal time.Duration
+	sync.RWMutex
 }
 
 func ProcessCMDLine() (p Params) {
@@ -171,6 +180,9 @@ func main() {
 		return
 	}
 
+	// Track message processing time
+	TimeTracker := TrackProcessingTime{}
+
 	dest := &net.TCPAddr{IP: remoteIP, Port: int(remotePort)}
 	log.WithFields(log.Fields{"type": "smpp-client", "remoteIP": dest}).Info("Connecting to")
 	conn, err := net.DialTCP("tcp", nil, dest)
@@ -188,6 +200,9 @@ func main() {
 	},
 		1)
 
+	// Handle `SEND COMPLETE` event
+	SendCompleteCH := make(chan interface{})
+
 	for {
 		select {
 		case x := <-s.Status:
@@ -196,7 +211,7 @@ func main() {
 
 				// Start packet submission
 				log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "SendPacket", "count": config.SendCount, "rate": config.SendRate}).Info("Start message bulk message submission")
-				go PacketSender(s, rP, uint(config.SendRate), uint(config.SendCount))
+				go PacketSender(s, rP, uint(config.SendRate), uint(config.SendCount), &TimeTracker, SendCompleteCH)
 			}
 
 		case x := <-s.Inbox:
@@ -210,15 +225,37 @@ func main() {
 		case x := <-s.InboxR:
 			log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "InboxR"}).Debug(x)
 
+			TimeTracker.Lock()
+			TimeTracker.Count++
+			rtd := x.CreateTime.Sub(x.OrigTime)
+			TimeTracker.DelayTotal += rtd
+			TimeTracker.Unlock()
+
+			/*
+				fmt.Println("Packet:")
+				fmt.Println("CreateTime:", x.CreateTime)
+				fmt.Println("NetSendTime:", x.NetSentTime)
+				fmt.Println("OrigTime:", x.OrigTime)
+				fmt.Println("NetOrigTime:", x.NetOrigTime)
+			*/
+			//			fmt.Println("Round Trip Delay: ", rtd)
 		case <-s.Closed:
 			log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "close"}).Warning("Connection is closed")
 			return
+		case <-SendCompleteCH:
+			s.Close("Send complete")
 		}
 	}
 }
 
 // Send messages
-func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, rate uint, cnt uint) {
+func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, rate uint, cnt uint, TimeTracker *TrackProcessingTime, SendCompleteCH chan interface{}) {
+	// Sleep for 3s after finishing sending and close trigger channel
+	defer func() {
+		time.Sleep(3 * time.Second)
+		close(SendCompleteCH)
+	}()
+
 	var tick time.Duration
 	var tickCouter uint
 	var tickInfoModule uint
@@ -254,18 +291,31 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, rate uint, cnt u
 			tickCouter++
 			var i uint
 			for ; (i < blockSize) && (done < cnt); i++ {
+				p.CreateTime = time.Now()
 				s.Outbox <- p
 				msgLastSec++
 				done++
 			}
 			if done >= cnt {
-				fmt.Println("#Done!")
+				fmt.Println("#Finished sending", cnt, "messages with rate", rate)
 				return
 			}
 
 			if tickCouter%tickInfoModule == 0 {
 				tx, rx := s.GetTrackQueueSize()
-				fmt.Println("[", s.SessionID, "] During last 1s: ", msgLastSec, " [MAX:", done, "][TX:", tx, "][RX:", rx, "]")
+				TimeTracker.Lock()
+				tCnt := TimeTracker.Count
+				tDur := TimeTracker.DelayTotal
+				TimeTracker.Count = 0
+				TimeTracker.DelayTotal = 0
+				TimeTracker.Unlock()
+
+				var tAvg int64
+				if tCnt > 0 {
+					tAvg = tDur.Microseconds() / int64(tCnt)
+				}
+
+				fmt.Println("[", s.SessionID, "] During last 1s: ", msgLastSec, " [MAX:", done, "][TX:", tx, "][RX:", rx, "][RTDavg micros: ", tAvg, ",", tCnt, "]")
 				msgLastSec = 0
 			}
 

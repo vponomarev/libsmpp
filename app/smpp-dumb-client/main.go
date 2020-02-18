@@ -8,6 +8,8 @@ import (
 	"libsmpp"
 	libsmppConst "libsmpp/const"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"strconv"
 	"strings"
@@ -16,9 +18,11 @@ import (
 )
 
 type Config struct {
-	Remote   string `yaml:"remote,omitempty"`
-	LogLevel string `yaml:"logLevel,omitempty"`
-	Bind     struct {
+	Remote         string `yaml:"remote,omitempty"`
+	LogLevel       string `yaml:"logLevel,omitempty"`
+	Profiler       bool   `yaml:"profiler,omitempty"`
+	ProfilerListen string `yaml:"profilerListen,omitempty"`
+	Bind           struct {
 		SystemID   string `yaml:"systemID,omitempty"`
 		SystemType string `yaml:"systemType,omitempty"`
 		Password   string `yaml:"password,omitempty"`
@@ -152,6 +156,22 @@ func main() {
 	if err != nil {
 		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Invalid destination Port:", remote[1])
 		return
+	}
+
+	// Init profiler if enabled
+	if config.Profiler {
+		if len(config.ProfilerListen) == 0 {
+			config.ProfilerListen = "127.0.0.1:5800"
+		}
+		log.WithFields(log.Fields{"type": "smpp-client", "action": "profiler"}).Info("Starting profiler at: ", config.ProfilerListen)
+
+		go func(addr string) {
+			err := http.ListenAndServe(addr, nil)
+			if err != nil {
+				log.WithFields(log.Fields{"type": "smpp-client", "action": "profiler"}).Fatal("ListenAndServe returned an error: ", err)
+				return
+			}
+		}(config.ProfilerListen)
 	}
 
 	// Init SMPP Session

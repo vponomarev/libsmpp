@@ -2,8 +2,14 @@
 logLevel: debug
 #logLevel: trace
 
+# Profiler configuration [ yes / no ]
+profiler: yes
+
+# Profiler listening IP:port [ default is: 127.0.0.1:5800 ]
+profilerListen: 127.0.0.1:5800
+
 # Remote IP:port
-remote: 192.168.4.98:2775
+remote: 192.168.4.98:2500
 
 # Bind parameters
 bind:
@@ -26,10 +32,11 @@ message:
   body: "This is message for sending"
 
 # Number of messages to send
-count: 1
+count: 1000
 
 # Submission rate
-rate: 100
+rate: 10
 
 # Submission TX window
-window: 1
+window: 100
+

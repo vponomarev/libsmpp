@@ -133,24 +133,24 @@ func main() {
 	// Split REMOTE HOST:PORT
 	remote := strings.Split(config.Remote, ":")
 	if len(remote) != 2 {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Error("Cannot parse remote ip:port (", config.Remote, ")")
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Cannot parse remote ip:port (", config.Remote, ")")
 		return
 	}
 
 	// Check if Bind parameters are set (systemID at least)
 	if len(config.Bind.SystemID) < 1 {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Error("bind/systemID is not specified")
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("bind/systemID is not specified")
 		return
 	}
 	remoteIP := net.ParseIP(remote[0])
 	if remoteIP == nil {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Error("Invalid destination IP:", remote[0])
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Invalid destination IP:", remote[0])
 		return
 	}
 
 	remotePort, err := strconv.ParseUint(remote[1], 10, 16)
 	if err != nil {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Error("Invalid destination Port:", remote[1])
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Invalid destination Port:", remote[1])
 		return
 	}
 
@@ -178,7 +178,7 @@ func main() {
 		RegisteredDelivery: uint8(config.Message.RegisteredDelivery),
 	})
 	if rErr != nil {
-		fmt.Println("Error encoding packet body")
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error encoding packet body")
 		return
 	}
 
@@ -189,7 +189,7 @@ func main() {
 	log.WithFields(log.Fields{"type": "smpp-client", "remoteIP": dest}).Info("Connecting to")
 	conn, err := net.DialTCP("tcp", nil, dest)
 	if err != nil {
-		log.WithFields(log.Fields{"type": "smpp-client", "service": "outConnect", "remoteIP": dest}).Error("Cannot connect to")
+		log.WithFields(log.Fields{"type": "smpp-client", "service": "outConnect", "remoteIP": dest}).Fatal("Cannot connect to")
 		return
 	}
 
@@ -233,14 +233,6 @@ func main() {
 			TimeTracker.DelayTotal += rtd
 			TimeTracker.Unlock()
 
-			/*
-				fmt.Println("Packet:")
-				fmt.Println("CreateTime:", x.CreateTime)
-				fmt.Println("NetSendTime:", x.NetSentTime)
-				fmt.Println("OrigTime:", x.OrigTime)
-				fmt.Println("NetOrigTime:", x.NetOrigTime)
-			*/
-			//			fmt.Println("Round Trip Delay: ", rtd)
 		case <-s.Closed:
 			log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "close"}).Warning("Connection is closed")
 			return
@@ -287,9 +279,16 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, T
 
 	var done uint
 	c := time.Tick(tick)
+	lastInfoReport := time.Now()
+	firstInfoReport := time.Now()
 	for {
 		select {
 		case <-c:
+			// First tick
+			if tickCouter == 0 {
+				lastInfoReport = time.Now()
+				firstInfoReport = time.Now()
+			}
 
 			tickCouter++
 
@@ -318,7 +317,13 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, T
 				}
 			}
 			if done >= config.SendCount {
-				fmt.Println("#Finished sending", config.SendCount, "messages with rate", config.SendRate)
+				reportDiff := time.Since(firstInfoReport).Milliseconds()
+				var realRate int64
+				if reportDiff > 0 {
+					realRate = (int64(config.SendCount) * 1000) / reportDiff
+				}
+
+				fmt.Println("#Finished sending", config.SendCount, "messages with expected rate:", config.SendRate, ", real rate:", realRate)
 				return
 			}
 
@@ -332,10 +337,14 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, T
 
 				var tAvg int64
 				if tCnt > 0 {
-					tAvg = tDur.Microseconds() / int64(tCnt)
+					if tCnt > 0 {
+						tAvg = tDur.Microseconds() / int64(tCnt)
+					}
 				}
 
-				fmt.Println("[", s.SessionID, "] During last 1s: ", msgLastSec, " [MAX:", done, "][TX:", txQ, "][RX:", rxQ, "][RTDavg micros: ", tAvg, ",", tCnt, "]")
+				reportDiff := time.Since(lastInfoReport).Milliseconds()
+				lastInfoReport = time.Now()
+				fmt.Println("[", s.SessionID, "] During last", reportDiff, "ms:", int64(msgLastSec)*1000/reportDiff, "[MAX:", done, "][TX:", txQ, "][RX:", rxQ, "][RTDavg micros: ", tAvg, ",", tCnt, "]")
 				msgLastSec = 0
 			}
 

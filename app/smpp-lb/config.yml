@@ -1,3 +1,6 @@
+# Loglevel: trace / debug / info / warning / error / fatal / panic
+logLevel: info
+
 # Server configuration
 server:
   # Listen port
@@ -8,4 +11,10 @@ logging:
   # Server connection
   server:
     # Incoming Rate (yes/no)
-    rate: no
+    rate: yes
+
+# Client configuration
+client:
+  # Remote SMSC
+  remote: 127.0.0.1:2500
+

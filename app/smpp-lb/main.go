@@ -91,22 +91,19 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config Confi
 
 	go s.RunIncoming(conn, id)
 
-	var msgID uint
-	msgID = 1
-
 	if config.Logging.Server.Rate {
 
-		go func(msgID *uint, s *libsmpp.SMPPSession) {
-			var sv uint
+		go func(p *libsmpp.SessionPool) {
+			var sv uint32
 			sv = 0
 			c := time.Tick(1000 * time.Millisecond)
 			for {
 
 				select {
 				case <-c:
-					sn := *msgID
+					sn := p.GetLastTransactionID()
 					if sn > sv {
-						fmt.Println("[", s.SessionID, "] During last 1s: ", (sn - sv))
+						fmt.Println("[", s.SessionID, "] During last 1s: ", sn-sv)
 						sv = sn
 					} else {
 						fmt.Println("[", s.SessionID, "] During last 1s: -")
@@ -115,7 +112,8 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config Confi
 					return
 				}
 			}
-		}(&msgID, s)
+		}(pool)
+
 	}
 	for {
 		select {

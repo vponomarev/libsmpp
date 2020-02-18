@@ -37,6 +37,13 @@ func (p *SessionPool) allocateTransactionID() (r uint32) {
 	return
 }
 
+func (p *SessionPool) GetLastTransactionID() (r uint32) {
+	p.sessionMutex.RLock()
+	r = p.maxTransaction
+	p.sessionMutex.RUnlock()
+	return
+}
+
 // Register SMPPSession in pool
 func (p *SessionPool) RegisterSession(s *SMPPSession) {
 	p.sessionMutex.Lock()

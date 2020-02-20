@@ -1,6 +1,12 @@
 # Loglevel: trace / debug / info / warning / error / fatal / panic
 logLevel: info
 
+# Profiler configuration [ yes / no ]
+profiler: yes
+
+# Profiler listening IP:port [ default is: 127.0.0.1:5801 ]
+profilerListen: 127.0.0.1:5801
+
 # Server configuration
 server:
   # Listen port

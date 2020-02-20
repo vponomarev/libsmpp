@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"libsmpp"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"strconv"
 	"strings"
@@ -20,8 +22,10 @@ type Config struct {
 	Server struct {
 		Port int
 	}
-	LogLevel string `yaml:"logLevel,omitempty"`
-	Logging  struct {
+	LogLevel       string `yaml:"logLevel,omitempty"`
+	Profiler       bool   `yaml:"profiler,omitempty"`
+	ProfilerListen string `yaml:"profilerListen,omitempty"`
+	Logging        struct {
 		Server struct {
 			Rate bool
 		}
@@ -142,6 +146,24 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config Confi
 
 }
 
+func httpLogLevel(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	level := r.FormValue("level")
+	if len(level) > 0 {
+		if l, err := log.ParseLevel(level); err == nil {
+			log.SetLevel(l)
+			log.WithFields(log.Fields{
+				"type": "smpp-client",
+			}).Warning("Override LogLevel to: ", l.String())
+			fmt.Fprintf(w, "OK")
+		} else {
+			fmt.Fprintf(w, "ERROR:", err)
+		}
+	} else {
+		fmt.Fprintf(w, log.GetLevel().String())
+	}
+}
+
 func main() {
 	pParam := ProcessCMDLine()
 
@@ -190,20 +212,37 @@ func main() {
 	// Split REMOTE HOST:PORT
 	remote := strings.Split(config.Client.Remote, ":")
 	if len(remote) != 2 {
-		log.WithFields(log.Fields{"type": "smpp-lb"}).Error("Cannot parse remote ip:port (", config.Client.Remote, ")")
+		log.WithFields(log.Fields{"type": "smpp-lb"}).Fatal("Cannot parse remote ip:port (", config.Client.Remote, ")")
 		return
 	}
 
 	remoteIP := net.ParseIP(remote[0])
 	if remoteIP == nil {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Error("Invalid destination IP:", remote[0])
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Invalid destination IP:", remote[0])
 		return
 	}
 
 	remotePort, err := strconv.ParseUint(remote[1], 10, 16)
 	if err != nil {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Error("Invalid destination Port:", remote[1])
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Invalid destination Port:", remote[1])
 		return
+	}
+
+	// Init profiler if enabled
+	if config.Profiler {
+		if len(config.ProfilerListen) == 0 {
+			config.ProfilerListen = "127.0.0.1:5801"
+		}
+		log.WithFields(log.Fields{"type": "smpp-lb", "action": "profiler"}).Info("Starting profiler at: ", config.ProfilerListen)
+
+		go func(addr string) {
+			http.HandleFunc("/log/level", httpLogLevel)
+			err := http.ListenAndServe(addr, nil)
+			if err != nil {
+				log.WithFields(log.Fields{"type": "smpp-lb", "action": "profiler"}).Fatal("ListenAndServe returned an error: ", err)
+				return
+			}
+		}(config.ProfilerListen)
 	}
 
 	pool := libsmpp.SessionPool{}

@@ -40,3 +40,5 @@ rate: 10
 # Submission TX window
 window: 100
 
+# Should we stay connected after sending messages [ default: no ]
+stayConnected: yes

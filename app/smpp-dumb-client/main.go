@@ -46,6 +46,8 @@ type Config struct {
 	SendCount  uint `yaml:"count"`
 	SendRate   uint `yaml:"rate"`
 	SendWindow uint `yaml:"window"`
+
+	StayConnected bool `yaml:"stayConnected,omitempty"`
 }
 
 type Params struct {
@@ -265,10 +267,14 @@ func main() {
 // Send messages
 func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, TimeTracker *TrackProcessingTime, SendCompleteCH chan interface{}) {
 	// Sleep for 3s after finishing sending and close trigger channel
-	defer func() {
-		time.Sleep(3 * time.Second)
-		close(SendCompleteCH)
-	}()
+	defer func(config Config) {
+		if config.StayConnected {
+			return
+		} else {
+			time.Sleep(600 * time.Second)
+			close(SendCompleteCH)
+		}
+	}(config)
 
 	var tick time.Duration
 	var tickCouter uint

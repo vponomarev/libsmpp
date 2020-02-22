@@ -271,7 +271,7 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, T
 		if config.StayConnected {
 			return
 		} else {
-			time.Sleep(600 * time.Second)
+			time.Sleep(5 * time.Second)
 			close(SendCompleteCH)
 		}
 	}(config)

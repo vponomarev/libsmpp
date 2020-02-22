@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	//	"sync"
 	"time"
 )
 
@@ -52,6 +53,56 @@ func doStop() bool {
 	return false
 }
 
+type HttpHandler struct {
+	p      libsmpp.SessionPool
+	config *Config
+}
+
+// [ /session/list ]
+func (h *HttpHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	for k, v := range h.p.GetSessionList() {
+		fmt.Fprintln(w, k, ":", v, v.Cs.Error(), v.Cs.NError())
+	}
+}
+
+// [ /log/level ]
+func (h *HttpHandler) HttpLogLevel(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	level := r.FormValue("level")
+	if len(level) > 0 {
+		if l, err := log.ParseLevel(level); err == nil {
+			log.SetLevel(l)
+			log.WithFields(log.Fields{
+				"type": "smpp-client",
+			}).Warning("Override LogLevel to: ", l.String())
+			fmt.Fprintf(w, "OK")
+		} else {
+			fmt.Fprintf(w, "ERROR:", err)
+		}
+	} else {
+		fmt.Fprintf(w, log.GetLevel().String())
+	}
+}
+
+// [ /log/rate ]
+func (h *HttpHandler) HttpLogRate(w http.ResponseWriter, r *http.Request) {
+	rate := r.FormValue("rate")
+	if len(rate) > 0 {
+		if l, err := strconv.ParseBool(rate); err == nil {
+			h.config.Logging.Server.Rate = l
+			log.WithFields(log.Fields{
+				"type": "smpp-lb",
+			}).Warning("Override LoggingRate to: ", l)
+			fmt.Fprintf(w, "OK")
+		} else {
+			fmt.Fprintf(w, "ERROR:", err)
+		}
+	} else {
+		fmt.Fprintln(w, h.config.Logging.Server.Rate)
+	}
+}
+
 func ProcessCMDLine() (p Params) {
 	// Set default
 	p.LogLevel = log.InfoLevel
@@ -83,7 +134,7 @@ func ProcessCMDLine() (p Params) {
 	return p
 }
 
-func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config Config) {
+func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config *Config) {
 
 	// Allocate new SMPP Session structure
 	s := &libsmpp.SMPPSession{
@@ -95,16 +146,15 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config Confi
 
 	go s.RunIncoming(conn, id)
 
-	if config.Logging.Server.Rate {
+	go func(p *libsmpp.SessionPool, config *Config, s *libsmpp.SMPPSession) {
+		var sv uint32
+		sv = 0
+		c := time.Tick(1000 * time.Millisecond)
+		for {
 
-		go func(p *libsmpp.SessionPool) {
-			var sv uint32
-			sv = 0
-			c := time.Tick(1000 * time.Millisecond)
-			for {
-
-				select {
-				case <-c:
+			select {
+			case <-c:
+				if config.Logging.Server.Rate {
 					sn := p.GetLastTransactionID()
 					if sn > sv {
 						fmt.Println("[", s.SessionID, "] During last 1s: ", sn-sv)
@@ -112,13 +162,13 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config Confi
 					} else {
 						fmt.Println("[", s.SessionID, "] During last 1s: -")
 					}
-				case <-s.Closed:
-					return
 				}
+			case <-s.Closed:
+				return
 			}
-		}(pool)
+		}
+	}(pool, config, s)
 
-	}
 	for {
 		select {
 		// Request for BIND validation
@@ -135,6 +185,7 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config Confi
 			if x.GetSMPPState() == libsmpp.CSMPPBound {
 				// Pass session to SessionPool
 				pool.RegisterSession(s)
+				fmt.Println("# pool.RegisterSession() execution finished, stopping hConn() processing")
 				return
 			}
 
@@ -144,24 +195,6 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config Confi
 		}
 	}
 
-}
-
-func httpLogLevel(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	level := r.FormValue("level")
-	if len(level) > 0 {
-		if l, err := log.ParseLevel(level); err == nil {
-			log.SetLevel(l)
-			log.WithFields(log.Fields{
-				"type": "smpp-client",
-			}).Warning("Override LogLevel to: ", l.String())
-			fmt.Fprintf(w, "OK")
-		} else {
-			fmt.Fprintf(w, "ERROR:", err)
-		}
-	} else {
-		fmt.Fprintf(w, log.GetLevel().String())
-	}
 }
 
 func main() {
@@ -228,6 +261,9 @@ func main() {
 		return
 	}
 
+	pool := libsmpp.SessionPool{}
+	pool.Init()
+
 	// Init profiler if enabled
 	if config.Profiler {
 		if len(config.ProfilerListen) == 0 {
@@ -235,8 +271,13 @@ func main() {
 		}
 		log.WithFields(log.Fields{"type": "smpp-lb", "action": "profiler"}).Info("Starting profiler at: ", config.ProfilerListen)
 
+		hh := &HttpHandler{p: pool, config: &config}
+
+		http.HandleFunc("/session/list", hh.ListSessions)
+		http.HandleFunc("/log/level", hh.HttpLogLevel)
+		http.HandleFunc("/log/rate", hh.HttpLogRate)
+
 		go func(addr string) {
-			http.HandleFunc("/log/level", httpLogLevel)
 			err := http.ListenAndServe(addr, nil)
 			if err != nil {
 				log.WithFields(log.Fields{"type": "smpp-lb", "action": "profiler"}).Fatal("ListenAndServe returned an error: ", err)
@@ -244,9 +285,6 @@ func main() {
 			}
 		}(config.ProfilerListen)
 	}
-
-	pool := libsmpp.SessionPool{}
-	pool.Init()
 
 	var id uint32 = 1
 
@@ -271,7 +309,7 @@ func main() {
 			return
 		}
 		log.WithFields(log.Fields{"type": "smpp-lb", "remoteIP": conn.RemoteAddr().String()}).Warning("Received incoming conneciton")
-		go hConn(id, conn, &pool, config)
+		go hConn(id, conn, &pool, &config)
 	}
 }
 
@@ -300,14 +338,15 @@ func outConnect(id uint32, dest *net.TCPAddr, pool *libsmpp.SessionPool) {
 	},
 		id)
 
+forLoop:
 	for {
 		select {
 		case x := <-s.Status:
 			log.WithFields(log.Fields{"type": "smpp-lb", "SID": s.SessionID, "service": "outConnect", "action": "StatusUpdate"}).Warning(x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
 			if x.GetSMPPState() == libsmpp.CSMPPBound {
 				// Pass session to SessionPool
-				pool.RegisterSession(s)
-				return
+				go pool.RegisterSession(s)
+				break forLoop
 			}
 
 		case <-s.Closed:
@@ -315,4 +354,10 @@ func outConnect(id uint32, dest *net.TCPAddr, pool *libsmpp.SessionPool) {
 			return
 		}
 	}
+
+	// Session Close event fired
+	<-s.Closed
+
+	log.WithFields(log.Fields{"type": "smpp-lb", "service": "outConnect", "remote": dest}).Info("Session is closed")
+	return
 }

@@ -67,6 +67,10 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 
 		case x := <-s.Inbox:
 			// Prepare packet for sending to Pool inbox
+			if log.GetLevel() == log.TraceLevel {
+				log.WithFields(log.Fields{"type": "pool", "SID": pe.SessionID, "service": "RegisterSession", "action": "Inbox"}).Trace(x)
+
+			}
 			pp := PQPacket{
 				OrigSessionID: pe.SessionID,
 				DestSessionID: 0,
@@ -80,7 +84,9 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 		//
 		case x := <-s.InboxR:
 			// Try to unpark message
-			log.WithFields(log.Fields{"type": "pool", "SID": pe.SessionID, "service": "RegisterSession", "action": "Inbox", "UTID": x.UplinkTransactionID}).Debug("Incoming QuickReply: ", x)
+			if log.GetLevel() == log.TraceLevel {
+				log.WithFields(log.Fields{"type": "pool", "SID": pe.SessionID, "service": "RegisterSession", "action": "InboxR", "UTID": x.UplinkTransactionID}).Trace("Incoming QuickReply: ", x)
+			}
 
 			// Check if we have parked record
 			if x.UplinkTransactionID > 0 {
@@ -117,7 +123,7 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 			}
 
 		case <-s.Closed:
-			fmt.Println("[", pe.SessionID, "] SP.RegisterSession: Session closed")
+			log.WithFields(log.Fields{"type": "pool", "SID": pe.SessionID, "service": "RegisterSession", "action": "Close"}).Info("Close channel is triggered")
 
 			// Remove session from pool
 			p.sessionMutex.Lock()
@@ -133,6 +139,12 @@ func (p *SessionPool) RegisterSession(s *SMPPSession) {
 // Manage message queue
 func (p *SessionPool) QManager() {
 	var msgID uint32
+
+	log.WithFields(log.Fields{"type": "pool", "service": "QManager", "action": "Start"}).Info("Started QManager")
+	defer func() {
+		log.WithFields(log.Fields{"type": "pool", "service": "QManager", "action": "Stop"}).Fatal("Unexpected stop of QManager")
+	}()
+
 	for {
 		select {
 		case pp := <-p.Queue:
@@ -231,8 +243,11 @@ func (p *SessionPool) QDeliveryManager() {
 			// Send packet to Outbox of specified Session
 			if ps != nil {
 				ps.Outbox <- pp.Packet
+				if log.GetLevel() == log.TraceLevel {
+					log.WithFields(log.Fields{"type": "pool", "SID": pp.OrigSessionID, "service": "QDeliveryManager", "action": "SendToSpecificSession", "DestSID": pp.DestSessionID, "UTID": pp.Packet.UplinkTransactionID}).Trace("Sent")
+				}
 			} else {
-				log.WithFields(log.Fields{"type": "pool", "SID": pp.OrigSessionID, "service": "QDeliveryManager", "action": "ReadQRespError", "DestSID": pp.DestSessionID, "UTID": pp.Packet.UplinkTransactionID}).Info("Cannot find destination session")
+				log.WithFields(log.Fields{"type": "pool", "SID": pp.OrigSessionID, "service": "QDeliveryManager", "action": "SendToSpecificSession", "DestSID": pp.DestSessionID, "UTID": pp.Packet.UplinkTransactionID}).Info("Cannot find destination session")
 				//fmt.Println("[", pp.OrigSessionID, "] SP.QDeliveryManager# CANNOT FIND DESTINATION SESSION")
 			}
 		}

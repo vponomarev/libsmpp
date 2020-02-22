@@ -33,7 +33,7 @@ func (s *SMPPSession) Init() {
 	s.InboxR = make(chan SMPPPacket)
 
 	// Outgoing messages and replies to SMPP link
-	s.Outbox = make(chan SMPPPacket)
+	s.Outbox = make(chan SMPPPacket, 10)
 
 	// Outgoing RAW messages to SMPP link (only BIND_RESP and ENQUIRE_LINK/ENQUIRE_LINK_RESP packets)
 	s.OutboxRAW = make(chan []byte)
@@ -81,10 +81,14 @@ func (s *SMPPSession) Close(origin string) {
 	default:
 		f = true
 		close(s.Closed)
+		s.conn.Close()
 	}
 	s.closeMTX.Unlock()
 	if f {
 		log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Close"}).Info("Close is called from [ ", origin, " ]")
+	} else {
+		log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Close", "action": "AlreadyClosed"}).Info("Close [already] is called from [ ", origin, " ]")
+
 	}
 }
 
@@ -114,7 +118,8 @@ func (s *SMPPSession) bindTimeouter(t int) {
 	case <-time.After(time.Duration(t) * time.Second):
 		if s.Cs.GetSMPPState() != CSMPPBound {
 			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "bindTimeouter", "timeout": t}).Info("Timeout raised, closing connection")
-			s.conn.Close()
+			s.Close("bindTimeouter")
+			// s.conn.Close()
 		}
 	case <-s.Closed:
 		return
@@ -129,6 +134,9 @@ func (s *SMPPSession) trackPacketTimeout() {
 		case <-tk.C:
 			// TODO
 			// 1. Search for expired packets
+			var outMsgPool []SMPPPacket
+
+			// Start critical LOCKING section
 			s.winMutex.RLock()
 			// fmt.Println("trackPacketTimeout TICK [", len(s.TrackRX), ", ", len(s.TrackTX), "]")
 			for k, v := range s.TrackRX {
@@ -141,12 +149,12 @@ func (s *SMPPSession) trackPacketTimeout() {
 						p := s.EncodeDeliverSmResp(SMPPPacket{Hdr: SMPPHeader{ID: v.CommandID, Seq: v.SeqNo}, SeqComplete: true}, s.TimeoutDeliverErrorCode)
 						p.IsUntrackable = true
 						log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "TimeoutTracker", "action": "RX", "packet": k}).Info("Send DELIVER_SM_RESP")
-						s.Outbox <- p
+						outMsgPool = append(outMsgPool, p)
 					case libsmpp.CMD_SUBMIT_SM:
 						p := s.EncodeSubmitSmResp(SMPPPacket{Hdr: SMPPHeader{ID: v.CommandID, Seq: v.SeqNo}, SeqComplete: true}, s.TimeoutSubmitErrorCode, "")
 						p.IsUntrackable = true
 						log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "TimeoutTracker", "action": "RX", "packet": k}).Info("Send SUBMIT_SM_RESP")
-						s.Outbox <- p
+						outMsgPool = append(outMsgPool, p)
 					default:
 						log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "TimeoutTracker", "action": "RX", "packet": k}).Info("RX Timeout - unsupported CommandID: ", v.CommandID)
 					}
@@ -165,6 +173,11 @@ func (s *SMPPSession) trackPacketTimeout() {
 				}
 			}
 			s.winMutex.RUnlock()
+			// Stop critical LOCKING session
+
+			for _, v := range outMsgPool {
+				s.Outbox <- v
+			}
 
 		case <-s.Closed:
 			return
@@ -214,6 +227,11 @@ func (s *SMPPSession) enquireResponder(p *SMPPPacket) {
 // * CDirIncoming - packets. that are received from socket
 // flagDropPacket - FLAG if packet shouldn't be delivered to recipient, because it is already delivered by timeout or this is wrong packet
 func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropPacket bool) {
+	// Skip untrackable packets
+	if p.IsUntrackable {
+		return
+	}
+
 	// Lock mutex
 	s.winMutex.Lock()
 
@@ -291,7 +309,10 @@ func (s *SMPPSession) winTrackEvent(dir ConnDirection, p *SMPPPacket) (flagDropP
 
 // Take messages from outbox and send messages to the wire
 func (s *SMPPSession) processOutbox() {
-	defer s.Close("processOutbox")
+	defer func() {
+		s.Close("processOutbox")
+		go s.dumbOutboxProcessor()
+	}()
 
 	log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Outbox"}).Info("Starting OUTBOX Processor")
 	for {
@@ -348,7 +369,18 @@ func (s *SMPPSession) processOutbox() {
 			return
 		}
 	}
+}
 
+// Dumb processor of incoming messages for already closed session
+func (s *SMPPSession) dumbOutboxProcessor() {
+	for {
+		select {
+		case <-s.Outbox:
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "DumbOutbox", "action": "MSGRecv"}).Info("Received dumb message on closed session")
+		case <-s.OutboxRAW:
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "DumbOutbox", "action": "MSGRecv"}).Info("Received dumb RAW message on closed session")
+		}
+	}
 }
 
 //
@@ -362,8 +394,11 @@ func (s *SMPPSession) RunIncoming(conn *net.TCPConn, id uint32) {
 
 //
 func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id uint32) {
-	defer conn.Close()
-	defer close(s.Closed)
+	defer func() {
+		fmt.Println("# DEFERRED Run(", conn, ") Calling SMPPSession.Close()")
+		s.Close("deferred Run()")
+		fmt.Println("# DEFERRED Run(", conn, ") Calling SMPPSession.Close() - complete")
+	}()
 
 	s.conn = conn // Connection socket
 

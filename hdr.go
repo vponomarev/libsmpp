@@ -235,6 +235,9 @@ type SMPPSession struct {
 
 	DebugLevel uint
 
+	// Print-debug NetBuf in case of failure
+	DebugNetBuf bool
+
 	BufTX struct {
 		NetTX        [libsmpp.SESSION_NET_BUF_SIZE]PacketNetBuf
 		RingPosition int

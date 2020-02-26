@@ -438,6 +438,9 @@ func (s *SMPPSession) RunIncoming(conn *net.TCPConn, id uint32) {
 }
 
 func (s *SMPPSession) PrintNetBuf() {
+	if !s.DebugNetBuf {
+		return
+	}
 	// Write output for Ring Buffer
 	s.BufRX.RLock()
 	fmt.Println("=====READ BUFFER=====")

@@ -63,6 +63,25 @@ func (s *SMPPSession) Init() {
 	// Allocate map for packet tracking
 	s.TrackRX = make(map[uint32]SMPPTracking, 1000)
 	s.TrackTX = make(map[uint32]SMPPTracking, 1000)
+
+	// Init PacketNetBuf ring buffer
+	s.BufRX.Lock()
+	for i := 0; i < libsmpp.SESSION_NET_BUF_SIZE; i++ {
+		s.BufRX.NetRX[i] = PacketNetBuf{
+			HDR:      make([]byte, 16),
+			Data:     make([]byte, MaxSMPPPacketSize),
+			DataSize: 0,
+			IsRaw:    false,
+		}
+		s.BufTX.NetTX[i] = PacketNetBuf{
+			HDR:      make([]byte, 16),
+			Data:     make([]byte, MaxSMPPPacketSize),
+			DataSize: 0,
+			IsRaw:    false,
+		}
+	}
+	s.BufRX.Unlock()
+
 }
 
 func (s *SMPPSession) GetTrackQueueSize() (tx int, rx int) {
@@ -341,6 +360,19 @@ func (s *SMPPSession) processOutbox() {
 				break
 			}
 
+			// Write netbuf
+			s.BufTX.Lock()
+			copy(s.BufTX.NetTX[s.BufTX.RingPosition].HDR, buf[0:16])
+			s.BufTX.NetTX[s.BufTX.RingPosition].DataSize = p.BodyLen
+			if p.BodyLen > 0 {
+				copy(s.BufTX.NetTX[s.BufTX.RingPosition].Data, buf[16:])
+			}
+			s.BufTX.RingPosition++
+			if s.BufTX.RingPosition >= libsmpp.SESSION_NET_BUF_SIZE {
+				s.BufTX.RingPosition = 0
+			}
+			s.BufTX.Unlock()
+
 			// Send traffic into socket
 			n, err := s.conn.Write(buf)
 			if err != nil {
@@ -353,6 +385,19 @@ func (s *SMPPSession) processOutbox() {
 			}
 
 		case p := <-s.OutboxRAW:
+			// Write netbuf
+			s.BufTX.Lock()
+			s.BufTX.NetTX[s.BufTX.RingPosition].IsRaw = true
+			s.BufTX.NetTX[s.BufTX.RingPosition].DataSize = uint32(len(p))
+			if len(p) > 0 {
+				copy(s.BufTX.NetTX[s.BufTX.RingPosition].Data, p)
+			}
+			s.BufTX.RingPosition++
+			if s.BufTX.RingPosition >= libsmpp.SESSION_NET_BUF_SIZE {
+				s.BufTX.RingPosition = 0
+			}
+			s.BufTX.Unlock()
+
 			// Send RAW packet from SMPPPacket.Body
 			n, err := s.conn.Write(p)
 			if err != nil {
@@ -390,6 +435,26 @@ func (s *SMPPSession) RunOutgoing(conn *net.TCPConn, b SMPPBind, id uint32) {
 
 func (s *SMPPSession) RunIncoming(conn *net.TCPConn, id uint32) {
 	s.Run(conn, CDirIncoming, SMPPBind{}, id)
+}
+
+func (s *SMPPSession) PrintNetBuf() {
+	// Write output for Ring Buffer
+	s.BufRX.RLock()
+	fmt.Println("=====READ BUFFER=====")
+	fmt.Println("Ring buffer position: ", s.BufRX.RingPosition)
+	for i := 0; i < libsmpp.SESSION_NET_BUF_SIZE; i++ {
+		fmt.Printf("[%02d][%x][%x](%d)\n", i, s.BufRX.NetRX[i].HDR, s.BufRX.NetRX[i].Data[0:s.BufRX.NetRX[i].DataSize], s.BufRX.NetRX[i].DataSize)
+	}
+	s.BufRX.RUnlock()
+
+	s.BufTX.RLock()
+	fmt.Println("=====WRITE BUFFER=====")
+	fmt.Println("Ring buffer position: ", s.BufTX.RingPosition)
+	for i := 0; i < libsmpp.SESSION_NET_BUF_SIZE; i++ {
+		fmt.Printf("[%v][%02d][%x][%x](%d)\n", s.BufTX.NetTX[i].IsRaw, i, s.BufTX.NetTX[i].HDR, s.BufTX.NetTX[i].Data[0:s.BufTX.NetTX[i].DataSize], s.BufTX.NetTX[i].DataSize)
+	}
+	s.BufTX.RUnlock()
+
 }
 
 //
@@ -442,23 +507,33 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 	// Message processing loop
 	for {
 		// Read packet header
-		if _, err := io.ReadFull(conn, hdrBuf); err != nil {
-			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "ReadFull"}).Debug("Error reading packet header (16 bytes)!", err)
-			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error reading incoming packet header (16 bytes)!"), err)
+		var numBytes int
+		var err error
+		if numBytes, err = io.ReadFull(conn, hdrBuf); err != nil {
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "ReadFull"}).Info("Error reading packet header (16 bytes) (read: ", numBytes, ")! ", err)
+			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error reading incoming packet header (16 bytes) (read: ", numBytes, ")! "), err)
+			s.PrintNetBuf()
 			return
 		}
+
 		// Decode header
 		if err := p.DecodeHDR(hdrBuf); err != nil {
-			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "DecodeHDR"}).Debug("Error decoding packet", err)
-			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error decoding header!"), err)
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "DecodeHDR"}).Info("Error decoding header (read: ", numBytes, ")! ", err, fmt.Sprintf("[%x]", hdrBuf))
+			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error decoding header (read: ", numBytes, ")!"), err)
+			s.PrintNetBuf()
 			return
 		}
+		// Save previous packet
+		s.BufRX.Lock()
+		copy(s.BufRX.NetRX[s.BufRX.RingPosition].HDR, hdrBuf)
+		s.BufRX.Unlock()
 
 		// Validate SMPP packet size
 		if p.Hdr.Len > MaxSMPPPacketSize {
 			// Invalid packet. Break
-			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "ValidateHeader"}).Debug("Incoming packet is too large!")
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "ValidateHeader"}).Info("Incoming packet is too large!")
 			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Incoming packet is too large (%d, while MaxPacketSize is %d)", p.Hdr.Len, MaxSMPPPacketSize), nil)
+			s.PrintNetBuf()
 			return
 		}
 
@@ -467,6 +542,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 			if _, err := io.ReadFull(conn, buf[0:p.Hdr.Len-16]); err != nil {
 				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "ReadFull"}).Debug("Error reading last part of the packet!", err)
 				s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error reading last part of the packet!"), err)
+				s.PrintNetBuf()
 				return
 			}
 		}
@@ -479,7 +555,16 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 		p.Body = make([]byte, p.BodyLen)
 		copy(p.Body, buf[0:p.BodyLen])
 
-		// Handle incoming command
+		s.BufRX.Lock()
+		copy(s.BufRX.NetRX[s.BufRX.RingPosition].Data, buf[0:p.BodyLen])
+		s.BufRX.NetRX[s.BufRX.RingPosition].DataSize = p.BodyLen
+		s.BufRX.RingPosition++
+
+		if s.BufRX.RingPosition >= libsmpp.SESSION_NET_BUF_SIZE {
+			s.BufRX.RingPosition = 0
+		}
+		s.BufRX.Unlock()
+
 		switch p.Hdr.ID {
 		// =============================================================
 		// BIND RECEIVER/TRANSMITTER/TRANSCIEVER

@@ -58,6 +58,9 @@ const (
 
 	// Default error code for SMPP DeliverSM packet
 	SMPP_TIMEOUT_DELIVER_ERROR_CODE = ESME_RX_T_APPN
+
+	// Network buffer size [ number of saved packets ]
+	SESSION_NET_BUF_SIZE = 32
 )
 
 // TLV Codes

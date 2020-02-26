@@ -234,6 +234,18 @@ type SMPPSession struct {
 	ManualBindValidate bool
 
 	DebugLevel uint
+
+	BufTX struct {
+		NetTX        [libsmpp.SESSION_NET_BUF_SIZE]PacketNetBuf
+		RingPosition int
+		sync.RWMutex
+	}
+
+	BufRX struct {
+		NetRX        [libsmpp.SESSION_NET_BUF_SIZE]PacketNetBuf
+		RingPosition int
+		sync.RWMutex
+	}
 }
 
 type SMPPTracking struct {
@@ -243,6 +255,14 @@ type SMPPTracking struct {
 	CreateTime time.Time // Original packet create time
 
 	UplinkTransactionID uint32 // Uniq packet ID, provided by UPLINK
+}
+
+// Historical buffer of processed (sent/received) packets
+type PacketNetBuf struct {
+	HDR      []byte
+	Data     []byte
+	DataSize uint32
+	IsRaw    bool
 }
 
 // TLV Code

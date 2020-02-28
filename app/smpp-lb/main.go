@@ -34,6 +34,8 @@ type Config struct {
 	Client struct {
 		Remote string
 	}
+
+	DebugNetBuf bool `yaml:"debugNetBuf"`
 }
 
 type Params struct {
@@ -141,6 +143,7 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config *Conf
 		ManualBindValidate: true,
 		DebugLevel:         1,
 		SessionID:          id,
+		DebugNetBuf:        config.DebugNetBuf,
 	}
 	s.Init()
 
@@ -289,7 +292,7 @@ func main() {
 	var id uint32 = 1
 
 	dest := &net.TCPAddr{IP: remoteIP, Port: int(remotePort)}
-	go outConnect(id, dest, &pool)
+	go outConnect(id, dest, &pool, &config)
 
 	// Listen socket for new connections
 	lAddr := &net.TCPAddr{IP: net.IPv4(0, 0, 0, 0), Port: config.Server.Port}
@@ -313,7 +316,7 @@ func main() {
 	}
 }
 
-func outConnect(id uint32, dest *net.TCPAddr, pool *libsmpp.SessionPool) {
+func outConnect(id uint32, dest *net.TCPAddr, pool *libsmpp.SessionPool, config *Config) {
 	conn, err := net.DialTCP("tcp", nil, dest)
 	if err != nil {
 		log.WithFields(log.Fields{"type": "smpp-lb", "service": "outConnect", "remote": dest}).Warning("Cannot connect to")
@@ -322,7 +325,8 @@ func outConnect(id uint32, dest *net.TCPAddr, pool *libsmpp.SessionPool) {
 	log.WithFields(log.Fields{"type": "smpp-lb", "service": "outConnect", "remote": dest}).Info("TCP Connection established")
 
 	s := &libsmpp.SMPPSession{
-		SessionID: id,
+		SessionID:   id,
+		DebugNetBuf: config.DebugNetBuf,
 	}
 	s.Init()
 

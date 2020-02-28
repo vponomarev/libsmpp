@@ -1,6 +1,7 @@
 package libsmpp
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -507,12 +508,15 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 		s.Outbox <- b
 	}
 
+	// Simply add bufio.NewReader()
+	newConn := bufio.NewReader(conn)
+
 	// Message processing loop
 	for {
 		// Read packet header
 		var numBytes int
 		var err error
-		if numBytes, err = io.ReadFull(conn, hdrBuf); err != nil {
+		if numBytes, err = io.ReadFull(newConn, hdrBuf); err != nil {
 			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "ReadFull"}).Info("Error reading packet header (16 bytes) (read: ", numBytes, ")! ", err)
 			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error reading incoming packet header (16 bytes) (read: ", numBytes, ")! "), err)
 			s.PrintNetBuf()
@@ -542,7 +546,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 
 		// Read least part of the packet
 		if p.Hdr.Len > 16 {
-			if _, err := io.ReadFull(conn, buf[0:p.Hdr.Len-16]); err != nil {
+			if _, err := io.ReadFull(newConn, buf[0:p.Hdr.Len-16]); err != nil {
 				log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "ReadFull"}).Debug("Error reading last part of the packet!", err)
 				s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error reading last part of the packet!"), err)
 				s.PrintNetBuf()

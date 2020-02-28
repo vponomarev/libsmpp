@@ -1,6 +1,9 @@
 # Loglevel: trace / debug / info / warning / error / fatal / panic
 logLevel: info
 
+# FLAG: If NetBuf should be printed in case of connection failure
+debugNetBuf: true
+
 # Profiler configuration [ yes / no ]
 profiler: yes
 

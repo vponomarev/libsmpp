@@ -1,8 +1,11 @@
 port: 2500
 
 # Loglevel: trace / debug / info / warning / error / fatal / panic
-logLevel: debug
+logLevel: info
 #logLevel: trace
+
+# FLAG: If NetBuf should be printed in case of connection failure
+debugNetBuf: true
 
 # Logging configuration
 logging:
@@ -14,4 +17,4 @@ logging:
 # Response behaviour
 responder:
   # Generate delivery reports: yes/no
-  deliveryReport: no
+  deliveryReport: yes

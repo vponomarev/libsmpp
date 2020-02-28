@@ -22,6 +22,7 @@ type Config struct {
 	Responder struct {
 		DeliveryReport bool `yaml:"deliveryReport"`
 	}
+	DebugNetBuf bool `yaml:"debugNetBuf"`
 }
 
 type Params struct {
@@ -131,6 +132,7 @@ func hConn(id uint32, conn *net.TCPConn, config Config) {
 		ManualBindValidate: true,
 		DebugLevel:         1,
 		SessionID:          id,
+		DebugNetBuf:        config.DebugNetBuf,
 	}
 	s.Init()
 

@@ -402,6 +402,18 @@ func (s *SMPPSession) EncodeSubmitDeliverSm(CMD uint32, ss SMPPSubmit) (p SMPPPa
 	copy(buf[offset:], ss.ShortMessages)
 	offset += len(ss.ShortMessages)
 
+	// Publish TLV if it's set
+	if ss.TLV != nil {
+		for tK, tV := range ss.TLV {
+			binary.BigEndian.PutUint16(buf[offset:], uint16(tK))
+			offset += 2
+			binary.BigEndian.PutUint16(buf[offset:], tV.Len)
+			offset += 2
+			copy(buf[offset:offset+int(tV.Len)], tV.Data)
+			offset += int(tV.Len)
+		}
+	}
+
 	p.Body = buf[0:offset]
 	p.BodyLen = uint32(offset)
 

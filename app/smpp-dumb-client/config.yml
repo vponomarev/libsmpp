@@ -1,6 +1,10 @@
 # Loglevel: trace / debug / info / warning / error / fatal / panic
-logLevel: debug
+logLevel: info
 #logLevel: trace
+
+
+# FLAG: If NetBuf should be printed in case of connection failure
+debugNetBuf: true
 
 # Profiler configuration [ yes / no ]
 profiler: yes
@@ -9,7 +13,7 @@ profiler: yes
 profilerListen: 127.0.0.1:5800
 
 # Remote IP:port
-remote: 192.168.4.98:2500
+remote: 127.0.0.1:2775
 
 # Bind parameters
 bind:
@@ -30,15 +34,21 @@ message:
   registeredDelivery: 1
   dataCoding: 1
   body: "This is message for sending"
+  tlv:
+# List of TLV fields, structure: CODE; TYPE; VALUE
+    - 0x1880; string; "App.Name.Rec"
+    - 0x1890; string; "Record Data"
+    - 0x1900; hex; "0102030405"
 
 # Number of messages to send
-count: 1000
+#count: 100000000
+count: 1
 
 # Submission rate
-rate: 10
+rate: 40000
 
 # Submission TX window
-window: 100
+window: 300
 
 # Should we stay connected after sending messages [ default: no ]
 stayConnected: yes

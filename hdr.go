@@ -269,12 +269,17 @@ type PacketNetBuf struct {
 }
 
 // TLV Code
-type TLVCode uint32
+type TLVCode uint16
 
 type SMPPAddress struct {
 	TON  uint8  // source_addr_ton
 	NPI  uint8  // source_addr_npi
 	Addr string // source_addr C-Octet-String (max 21)
+}
+
+type TLVStruct struct {
+	Data []byte
+	Len  uint16
 }
 
 // SUBMIT_SM structure
@@ -294,7 +299,7 @@ type SMPPSubmit struct {
 	SmLength              uint8  // sm_length
 	ShortMessages         string // short_message (0-254)
 
-	TLV map[TLVCode]interface{}
+	TLV map[TLVCode]TLVStruct
 }
 
 var CMDNameMapping = map[uint32]string{

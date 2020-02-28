@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
@@ -38,14 +39,16 @@ type Config struct {
 			NPI  int    `yaml:"npi"`
 			Addr string `yaml:"addr"`
 		}
-		RegisteredDelivery int    `yaml:"registeredDelivery"`
-		DataCoding         int    `yaml:"dataCoding"`
-		Body               string `yaml:"body"`
+		RegisteredDelivery int      `yaml:"registeredDelivery"`
+		DataCoding         int      `yaml:"dataCoding"`
+		Body               string   `yaml:"body"`
+		TLV                []string `yaml:"tlv"`
 	}
 
-	SendCount  uint `yaml:"count"`
-	SendRate   uint `yaml:"rate"`
-	SendWindow uint `yaml:"window"`
+	DebugNetBuf bool `yaml:"debugNetBuf"`
+	SendCount   uint `yaml:"count"`
+	SendRate    uint `yaml:"rate"`
+	SendWindow  uint `yaml:"window"`
 
 	StayConnected bool `yaml:"stayConnected,omitempty"`
 }
@@ -178,13 +181,13 @@ func main() {
 
 	// Init SMPP Session
 	s := &libsmpp.SMPPSession{
-		SessionID: 1,
+		SessionID:   1,
+		DebugNetBuf: config.DebugNetBuf,
 	}
 	s.Init()
 
 	// Prepare SUBMIT_SM packet if specified
-	// Encode packet
-	rP, rErr := s.EncodeSubmitSm(libsmpp.SMPPSubmit{
+	oP := libsmpp.SMPPSubmit{
 		ServiceType: "",
 		Source: libsmpp.SMPPAddress{
 			TON:  uint8(config.Message.From.TON),
@@ -198,7 +201,58 @@ func main() {
 		},
 		ShortMessages:      config.Message.Body,
 		RegisteredDelivery: uint8(config.Message.RegisteredDelivery),
-	})
+		TLV:                map[libsmpp.TLVCode]libsmpp.TLVStruct{},
+	}
+	for _, tlv := range config.Message.TLV {
+		tEntity := strings.Split(tlv, ";")
+		if len(tEntity) != 3 {
+			log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - should be 3 params")
+			return
+		}
+
+		tVal := strings.Trim(tEntity[2], " ")
+		if tVal[0] != '"' || tVal[len(tVal)-1] != '"' {
+			log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - take value into quotes")
+			return
+		}
+		tVal = strings.Trim(tVal, "\"")
+
+		var tK int64
+		var tV []byte
+		var err error
+		if (len(tEntity[0]) > 2) && (tEntity[0][0:2] == "0x") {
+			if tK, err = strconv.ParseInt(tEntity[0][2:], 16, 16); err != nil {
+				log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - HEX key [", tEntity[0], "]: ", err)
+				return
+			}
+		} else {
+			if tK, err = strconv.ParseInt(tEntity[0], 10, 16); err != nil {
+				log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - HEX key [", tEntity[0], "]: ", err)
+				return
+			}
+		}
+		switch strings.Trim(tEntity[1], " ") {
+		case "string":
+			tV = []byte(tVal)
+		case "hex":
+			if tV, err = hex.DecodeString(tVal); err != nil {
+				log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - HEX value [", tEntity[2], "]: ", err)
+				return
+			}
+		default:
+			log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - Unsupported value type [", tEntity[1], "]", err)
+			return
+		}
+		oP.TLV[libsmpp.TLVCode(tK)] = libsmpp.TLVStruct{
+			Data: tV,
+			Len:  uint16(len(tV)),
+		}
+		fmt.Println("TLV [", tlv, "] KEY=", tK, "; VAL[", tV, "]")
+
+	}
+
+	// Encode packet
+	rP, rErr := s.EncodeSubmitSm(oP)
 	if rErr != nil {
 		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error encoding packet body")
 		return
@@ -281,8 +335,14 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, T
 	var tickInfoModule uint
 	var blockSize uint
 	var msgLastSec uint
-	// For rate > 100 SMS/sec send send messages each 10 ms
-	if config.SendRate > 100 {
+
+	// For rate > 1000 SMS/sec send send messages each 2 ms
+	if config.SendRate > 1000 {
+		tick = 2 * time.Millisecond
+		blockSize = config.SendRate / 500
+		tickInfoModule = 500
+	} else if config.SendRate > 100 {
+		// For rate > 100 SMS/sec send send messages each 10 ms
 		tick = 10 * time.Millisecond
 		blockSize = config.SendRate / 100
 		tickInfoModule = 100

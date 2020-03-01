@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
@@ -56,16 +57,33 @@ func doStop() bool {
 }
 
 type HttpHandler struct {
-	p      libsmpp.SessionPool
+	p      *libsmpp.SessionPool
 	config *Config
 }
 
 // [ /session/list ]
 func (h *HttpHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	for k, v := range h.p.GetSessionList() {
-		fmt.Fprintln(w, k, ":", v, v.Cs.Error(), v.Cs.NError())
+	sl := h.p.GetSessionList()
+	/*
+		for k, v := range sl {
+			fmt.Fprintln(w, k, ":", v, v.Cs.Error(), v.Cs.NError(), v.Cs.GetDirection())
+		}
+	*/
+
+	jv, err := json.Marshal(sl)
+	if err != nil {
+		fmt.Fprintln(w, ": Error generating JSON")
+		return
 	}
+	w.Header().Add("Content-type", "application/json")
+	fmt.Fprintln(w, string(jv))
+}
+
+// [ /session/stat ]
+func (h *HttpHandler) SessionStats(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+
 }
 
 // [ /log/level ]
@@ -274,7 +292,7 @@ func main() {
 		}
 		log.WithFields(log.Fields{"type": "smpp-lb", "action": "profiler"}).Info("Starting profiler at: ", config.ProfilerListen)
 
-		hh := &HttpHandler{p: pool, config: &config}
+		hh := &HttpHandler{p: &pool, config: &config}
 
 		http.HandleFunc("/session/list", hh.ListSessions)
 		http.HandleFunc("/log/level", hh.HttpLogLevel)

@@ -148,7 +148,7 @@ func (s *SMPPSession) bindTimeouter(t int) {
 
 // Packet expiration tracker
 func (s *SMPPSession) trackPacketTimeout() {
-	tk := time.NewTicker(500 * time.Millisecond)
+	tk := time.NewTicker(1000 * time.Millisecond)
 	for {
 		select {
 		case <-tk.C:
@@ -480,6 +480,10 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 		s.Cs.cd = CDirOutgoing  // Manage connection direction
 		s.Cs.ts = CTCPOutgoing  // TCP: Outgoing
 		s.Cs.ss = CSMPPBindSent // SMPP: Bind sent
+
+		// Save bind info
+		s.Bind = cb
+
 	default:
 		s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Invalid connection direction"), nil)
 		return
@@ -518,7 +522,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 		var err error
 		if numBytes, err = io.ReadFull(newConn, hdrBuf); err != nil {
 			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "ReadFull"}).Info("Error reading packet header (16 bytes) (read: ", numBytes, ")! ", err)
-			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error reading incoming packet header (16 bytes) (read: ", numBytes, ")! "), err)
+			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error reading incoming packet header (16 bytes) (read: %d)! ", numBytes), err)
 			s.PrintNetBuf()
 			return
 		}
@@ -526,7 +530,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 		// Decode header
 		if err := p.DecodeHDR(hdrBuf); err != nil {
 			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "Run", "action": "DecodeHDR"}).Info("Error decoding header (read: ", numBytes, ")! ", err, fmt.Sprintf("[%x]", hdrBuf))
-			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error decoding header (read: ", numBytes, ")!"), err)
+			s.reportStateS(connState{ts: CTCPClosed, ss: CSMPPClosed}, fmt.Errorf("Error decoding header (read: %d)!", numBytes), err)
 			s.PrintNetBuf()
 			return
 		}

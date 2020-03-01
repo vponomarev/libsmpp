@@ -152,6 +152,7 @@ func (s *SMPPSession) DecodeBind(p *SMPPPacket) error {
 	default:
 		return fmt.Errorf("Unsupported bind commaind ID [%d]", p.Hdr.ID)
 	}
+	s.Bind.ConnMode = s.Cs.sm
 
 	// Decode systemID
 	var l, offset int

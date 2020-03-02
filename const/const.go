@@ -109,3 +109,15 @@ const (
 	TLV_ITS_REPLY_TYPE              = 0x1380
 	TLV_ITS_SESSION_INFO            = 0x1383
 )
+
+// Message state
+const (
+	STATE_ENROUTE       = 1
+	STATE_DELIVERED     = 2
+	STATE_EXPIRED       = 3
+	STATE_DELETED       = 4
+	STATE_UNDELIVERABLE = 5
+	STATE_ACCEPTED      = 6
+	STATE_UNKNOWN       = 7
+	STATE_REJECTED      = 8
+)

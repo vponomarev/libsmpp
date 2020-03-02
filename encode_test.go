@@ -319,7 +319,12 @@ func TestEncodeEnquireLink(t *testing.T) {
 				SmDefaultMsgID:        0x88,
 				ShortMessages:         "Test Message For SubmitSM coding",
 			}
-			expected := []byte("VDX\x00\x05\x02InfoAddrSt\x00\x01\x0079031234567\x00\x23\x7d\xde1234567890123456\x006543210987654321\x00\x55\x66\x77\x88\x20Test Message For SubmitSM coding")
+			input.TLV = make(map[TLVCode]TLVStruct)
+			input.TLV[0x1122] = TLVStruct{
+				Data: []byte("TestMSG"),
+				Len:  7,
+			}
+			expected := []byte("VDX\x00\x05\x02InfoAddrSt\x00\x01\x0079031234567\x00\x23\x7d\xde1234567890123456\x006543210987654321\x00\x55\x66\x77\x88\x20Test Message For SubmitSM coding\x11\x22\x00\x07TestMSG")
 			rP, eRrr := s.EncodeSubmitDeliverSm(libsmpp.CMD_SUBMIT_SM, input)
 			g.Assert(eRrr).Equal(nil)
 			g.Assert(rP.Hdr.ID).Equal(uint32(0x04))
@@ -378,6 +383,12 @@ func TestEncodeEnquireLink(t *testing.T) {
 				SmDefaultMsgID:        0xd8,
 				ShortMessages:         "This message is used for transcoding",
 			}
+			input.TLV = make(map[TLVCode]TLVStruct)
+			input.TLV[0x1122] = TLVStruct{
+				Data: []byte("TestMSG"),
+				Len:  7,
+			}
+
 			// Encode packet
 			ep, err := s.EncodeDeliverSm(input)
 			g.Assert(err).Equal(nil)

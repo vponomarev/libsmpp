@@ -548,9 +548,50 @@ func (s *SMPPSession) DecodeSubmitDeliverSm(p *SMPPPacket) (ss SMPPSubmit, err e
 			return
 		}
 		ss.ShortMessages = string(p.Body[offset : offset+int(ss.SmLength)])
+		offset += int(ss.SmLength)
 	}
 
-	// TODO: Parse TLV Data
+	// Check if there is TLV
+	if offset == len(p.Body) {
+		// NO TLV!
+		return
+	}
 
+	// Init TLV structure
+	ss.TLV = make(map[TLVCode]TLVStruct)
+
+	// Scan TLV
+	for offset < len(p.Body) {
+		// Check for minimum TLV header size
+		if offset+4 > len(p.Body) {
+			// ERROR
+			err = fmt.Errorf("TLV header is truncated")
+			return
+		}
+		//
+		tlvTag := TLVCode(binary.BigEndian.Uint16(p.Body[offset:]))
+		tlvLen := binary.BigEndian.Uint16(p.Body[offset+2:])
+
+		// Check if tlvLen is not so large
+		if tlvLen > MaxSMPPPacketSize {
+			err = fmt.Errorf("TLV len is too large")
+			return
+		}
+
+		// Check for TLV body size
+		if tlvLen > 0 && (offset+4+int(tlvLen) > len(p.Body)) {
+			err = fmt.Errorf("TLV body is truncated")
+			return
+		}
+
+		// Add TLV into map
+		ss.TLV[tlvTag] = TLVStruct{
+			Data: p.Body[offset+4 : offset+4+int(tlvLen)],
+			Len:  tlvLen,
+		}
+
+		// Switch to next TLV field
+		offset += 4 + int(tlvLen)
+	}
 	return
 }

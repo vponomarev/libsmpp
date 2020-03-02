@@ -282,6 +282,11 @@ type TLVStruct struct {
 	Len  uint16
 }
 
+type TLVInfo struct {
+	ID   TLVCode
+	Data TLVStruct
+}
+
 // SUBMIT_SM structure
 type SMPPSubmit struct {
 	ServiceType           string // service_type C-Octet-String (max 6)
@@ -334,4 +339,19 @@ var CMDNameMapping = map[uint32]string{
 
 func CmdName(id uint32) string {
 	return CMDNameMapping[id]
+}
+
+var StateMapping = map[uint8]string{
+	libsmpp.STATE_ENROUTE:       "ENROUTE",
+	libsmpp.STATE_DELIVERED:     "DELIVRD",
+	libsmpp.STATE_EXPIRED:       "EXPIRED",
+	libsmpp.STATE_DELETED:       "DELETED",
+	libsmpp.STATE_UNDELIVERABLE: "UNDELIV",
+	libsmpp.STATE_ACCEPTED:      "ACCEPTD",
+	libsmpp.STATE_UNKNOWN:       "UNKNOWN",
+	libsmpp.STATE_REJECTED:      "REJECTD",
+}
+
+func StateName(id uint8) string {
+	return StateMapping[id]
 }

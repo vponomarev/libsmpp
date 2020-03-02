@@ -429,6 +429,9 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, T
 				}
 
 				reportDiff := time.Since(lastInfoReport).Milliseconds()
+				if reportDiff < 1 {
+					reportDiff = 1
+				}
 				lastInfoReport = time.Now()
 				fmt.Println("[", s.SessionID, "] During last", reportDiff, "ms:", int64(msgLastSec)*1000/reportDiff, "[MAX:", done, "][TX:", txQ, "][RX:", rxQ, "][RTDavg micros: ", tAvg, ",", tCnt, "]")
 				msgLastSec = 0

@@ -1,13 +1,17 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"libsmpp"
+	libsmpp2 "libsmpp/const"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -20,7 +24,8 @@ type Config struct {
 		}
 	}
 	Responder struct {
-		DeliveryReport bool `yaml:"deliveryReport"`
+		DeliveryReport bool     `yaml:"deliveryReport"`
+		TLV            []string `yaml:"tlv"`
 	}
 	DebugNetBuf bool `yaml:"debugNetBuf"`
 }
@@ -31,6 +36,8 @@ type Params struct {
 		LogLevel bool
 	}
 }
+
+var tlvList []libsmpp.TLVInfo
 
 func ProcessCMDLine() (p Params) {
 	// Set default
@@ -97,6 +104,58 @@ func main() {
 				"type": "smpp-server",
 			}).Warning("Override LogLevel to: ", pParam.LogLevel.String())
 		}
+	}
+
+	// Preload Receipt TLV values
+	for _, tlv := range config.Responder.TLV {
+		tEntity := strings.Split(tlv, ";")
+		if len(tEntity) != 3 {
+			log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - should be 3 params")
+			return
+		}
+
+		tVal := strings.Trim(tEntity[2], " ")
+		if tVal[0] != '"' || tVal[len(tVal)-1] != '"' {
+			log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - take value into quotes")
+			return
+		}
+		tVal = strings.Trim(tVal, "\"")
+
+		var tK int64
+		var tV []byte
+		var err error
+		if (len(tEntity[0]) > 2) && (tEntity[0][0:2] == "0x") {
+			if tK, err = strconv.ParseInt(tEntity[0][2:], 16, 16); err != nil {
+				log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - HEX key [", tEntity[0], "]: ", err)
+				return
+			}
+		} else {
+			if tK, err = strconv.ParseInt(tEntity[0], 10, 16); err != nil {
+				log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - HEX key [", tEntity[0], "]: ", err)
+				return
+			}
+		}
+		switch strings.Trim(tEntity[1], " ") {
+		case "string":
+			tV = []byte(tVal)
+		case "hex":
+			if tV, err = hex.DecodeString(tVal); err != nil {
+				log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - HEX value [", tEntity[2], "]: ", err)
+				return
+			}
+		default:
+			log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - Unsupported value type [", tEntity[1], "]", err)
+			return
+		}
+
+		tlvList = append(tlvList, libsmpp.TLVInfo{
+			ID: libsmpp.TLVCode(tK),
+			Data: libsmpp.TLVStruct{
+				Data: tV,
+				Len:  uint16(len(tV)),
+			},
+		})
+		fmt.Println("TLV [", tlv, "] KEY=", tK, "; VAL[", tV, "]")
 	}
 
 	// Fill default values for config
@@ -199,15 +258,18 @@ func sessionProcessor(s *libsmpp.SMPPSession, config Config) {
 			log.WithFields(log.Fields{"type": "smpp-server", "service": "PacketLoop", "SID": s.SessionID, "action": fmt.Sprintf("%x (%s)", p.Hdr.ID, libsmpp.CmdName(p.Hdr.ID)), "Seq": p.Hdr.Seq, "Len": p.Hdr.Len}).Trace(fmt.Sprintf("%x", p.Body))
 
 			// Confirm packet
-			pR := s.EncodeSubmitSmResp(p, 0, fmt.Sprintf("%06x", msgID))
+			rMsgID := fmt.Sprintf("%06x", msgID)
+			dMsgID := msgID
+
+			pR := s.EncodeSubmitSmResp(p, 0, rMsgID)
 			s.Outbox <- pR
 			msgID++
 
 			if config.Responder.DeliveryReport {
 				// Generate DELIVERY REPORT in a separate go thread
-				go func(p libsmpp.SMPPPacket) {
-					pD, perr := s.DecodeSubmitDeliverSm(&p)
-					if perr != nil {
+				go func(p libsmpp.SMPPPacket, dMsgID uint32, rMsgID string, state uint8) {
+					pD, err := s.DecodeSubmitDeliverSm(&p)
+					if err != nil {
 						return
 					}
 					// SWAP Source <=> Dest
@@ -216,14 +278,35 @@ func sessionProcessor(s *libsmpp.SMPPSession, config Config) {
 					pD.Dest = ax
 
 					// Fill Message Text
-					pD.ShortMessages = "id:1234567890 sub:001 dlvrd:000 submit date:0000000000 done date:0000000000 stat:REJECTD err:000 text:"
-					pE, perr := s.EncodeDeliverSm(pD)
-					if perr != nil {
+					tText := (time.Now()).Format("0601021504")
+					pD.ShortMessages = fmt.Sprintf("id:%010d sub:001 dlvrd:001 submit date:%10s done date:%10s stat:%7s err:%3s text:", dMsgID, tText, tText, libsmpp.StateName(state), "000")
+					pD.TLV = make(map[libsmpp.TLVCode]libsmpp.TLVStruct)
+
+					// === TLV ===
+					// Predefined fields
+					for _, v := range tlvList {
+						pD.TLV[v.ID] = v.Data
+					}
+
+					// 0x001e Receipted message ID
+					msgIdHex := fmt.Sprintf("%09x", dMsgID)
+					pD.TLV[0x1e] = libsmpp.TLVStruct{
+						Data: []byte(msgIdHex),
+						Len:  uint16(len(msgIdHex)),
+					}
+
+					// 0x0427 Message state
+					pD.TLV[0x0427] = libsmpp.TLVStruct{
+						Data: []byte{state},
+						Len:  1,
+					}
+					pE, err := s.EncodeDeliverSm(pD)
+					if err != nil {
 						return
 					}
 
 					s.Outbox <- pE
-				}(p)
+				}(p, dMsgID, rMsgID, libsmpp2.STATE_REJECTED)
 			}
 
 		case p := <-s.InboxR:

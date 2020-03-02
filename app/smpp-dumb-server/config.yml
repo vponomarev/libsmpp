@@ -18,3 +18,8 @@ logging:
 responder:
   # Generate delivery reports: yes/no
   deliveryReport: yes
+  # Generate custom TLV fields
+  tlv:
+    - 0x0e;   hex;    "01"
+    - 0x06;   hex;    "01"
+    - 0x1502; string; "79039998877"

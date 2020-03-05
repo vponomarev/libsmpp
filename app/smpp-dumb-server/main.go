@@ -15,6 +15,11 @@ import (
 	"time"
 )
 
+const (
+	RESP_MSGID_HEX = iota + 1
+	RESP_MSGID_UUID
+)
+
 type Config struct {
 	Port     int    `yaml:"port,omitempty"`
 	LogLevel string `yaml:"logLevel,omitempty"`
@@ -24,10 +29,16 @@ type Config struct {
 		}
 	}
 	Responder struct {
+		MsgidFormat    string   `yaml:"msgidFormat",omitempty`
 		DeliveryReport bool     `yaml:"deliveryReport"`
 		TLV            []string `yaml:"tlv"`
 	}
 	DebugNetBuf bool `yaml:"debugNetBuf"`
+}
+
+// Loaded config
+type LConfig struct {
+	MsgidFormat int
 }
 
 type Params struct {
@@ -83,6 +94,7 @@ func main() {
 
 	// Load configuration file
 	var config Config
+	var lConfig LConfig
 
 	configFileName := "config.yml"
 	source, err := ioutil.ReadFile(configFileName)
@@ -91,6 +103,11 @@ func main() {
 			log.WithFields(log.Fields{
 				"type": "smpp-server",
 			}).Info("Loaded configuration file: ", configFileName)
+		} else {
+			log.WithFields(log.Fields{
+				"type": "smpp-server",
+			}).Fatal("Error parsing config file")
+			return
 		}
 	}
 
@@ -104,6 +121,22 @@ func main() {
 				"type": "smpp-server",
 			}).Warning("Override LogLevel to: ", pParam.LogLevel.String())
 		}
+	}
+
+	if len(config.Responder.MsgidFormat) > 0 {
+		switch config.Responder.MsgidFormat {
+		case "hex":
+			lConfig.MsgidFormat = RESP_MSGID_HEX
+		case "uuid":
+			lConfig.MsgidFormat = RESP_MSGID_UUID
+		default:
+			log.WithFields(log.Fields{
+				"type": "smpp-server",
+			}).Fatal("Incorrect value for configuration param responder.msgidFormat [", config.Responder.MsgidFormat, "]")
+			return
+		}
+	} else {
+		lConfig.MsgidFormat = RESP_MSGID_HEX
 	}
 
 	// Preload Receipt TLV values
@@ -181,11 +214,11 @@ func main() {
 			return
 		}
 		log.WithFields(log.Fields{"type": "smpp-server", "remoteIP": conn.RemoteAddr().String()}).Warning("Received incoming connectiton")
-		go hConn(id, conn, config)
+		go hConn(id, conn, &config, &lConfig)
 	}
 }
 
-func hConn(id uint32, conn *net.TCPConn, config Config) {
+func hConn(id uint32, conn *net.TCPConn, config *Config, lConfig *LConfig) {
 	// Allocate new SMPP Session structure
 	s := &libsmpp.SMPPSession{
 		ManualBindValidate: true,
@@ -212,7 +245,7 @@ func hConn(id uint32, conn *net.TCPConn, config Config) {
 			log.WithFields(log.Fields{"type": "smpp-server", "SID": s.SessionID, "service": "inConnect", "action": "StatusUpdate"}).Info(x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
 			if x.GetSMPPState() == libsmpp.CSMPPBound {
 				// Pass session to session processor
-				go sessionProcessor(s, config)
+				go sessionProcessor(s, config, lConfig)
 			}
 
 		case <-s.Closed:
@@ -222,7 +255,7 @@ func hConn(id uint32, conn *net.TCPConn, config Config) {
 	}
 }
 
-func sessionProcessor(s *libsmpp.SMPPSession, config Config) {
+func sessionProcessor(s *libsmpp.SMPPSession, config *Config, lConfig *LConfig) {
 	var msgID uint32
 	msgID = 1
 
@@ -258,8 +291,16 @@ func sessionProcessor(s *libsmpp.SMPPSession, config Config) {
 			log.WithFields(log.Fields{"type": "smpp-server", "service": "PacketLoop", "SID": s.SessionID, "action": fmt.Sprintf("%x (%s)", p.Hdr.ID, libsmpp.CmdName(p.Hdr.ID)), "Seq": p.Hdr.Seq, "Len": p.Hdr.Len}).Trace(fmt.Sprintf("%x", p.Body))
 
 			// Confirm packet
-			rMsgID := fmt.Sprintf("%06x", msgID)
 			dMsgID := msgID
+
+			var rMsgID string
+			if lConfig.MsgidFormat == RESP_MSGID_HEX {
+				// HEX
+				rMsgID = fmt.Sprintf("%06x", msgID)
+			} else {
+				// UUID
+				rMsgID = fmt.Sprintf("LibSMPP-SRV-%016d", msgID)
+			}
 
 			pR := s.EncodeSubmitSmResp(p, 0, rMsgID)
 			s.Outbox <- pR
@@ -289,10 +330,9 @@ func sessionProcessor(s *libsmpp.SMPPSession, config Config) {
 					}
 
 					// 0x001e Receipted message ID
-					msgIdHex := fmt.Sprintf("%09x", dMsgID)
 					pD.TLV[0x1e] = libsmpp.TLVStruct{
-						Data: []byte(msgIdHex),
-						Len:  uint16(len(msgIdHex)),
+						Data: []byte(rMsgID),
+						Len:  uint16(len(rMsgID)),
 					}
 
 					// 0x0427 Message state

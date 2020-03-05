@@ -16,6 +16,9 @@ logging:
 
 # Response behaviour
 responder:
+  # MSGID Format: hex / uuid
+  msgidFormat: uuid
+
   # Generate delivery reports: yes/no
   deliveryReport: yes
   # Generate custom TLV fields

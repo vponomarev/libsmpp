@@ -18,7 +18,8 @@ Implementation plans
 ----------------------------
 Create easy to implement gateway from IT world interface to SMPP - possibly Kafka/RabbitMQ or Amazon SQS compatible protocol.
 
-Have any questions?
-Have suggestions?
-You're related to telecom operator and need some functionality?
+- Have any questions?
+- Have suggestions?
+- You're related to telecom operator and need some functionality?
+
 Feel free to contact me.

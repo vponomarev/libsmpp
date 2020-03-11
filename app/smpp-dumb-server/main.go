@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"libsmpp"
 	libsmpp2 "libsmpp/const"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -29,9 +30,20 @@ type Config struct {
 		}
 	}
 	Responder struct {
-		MsgidFormat    string   `yaml:"msgidFormat",omitempty`
-		DeliveryReport bool     `yaml:"deliveryReport"`
-		TLV            []string `yaml:"tlv"`
+		MsgID string `yaml:"msgid",omitempty`
+		Delay struct {
+			Min int `yaml:"min,omitempty"`
+			Max int `yaml:"max,omitempty"`
+		}
+	}
+
+	Deliveryreport struct {
+		Enabled bool     `yaml:"enabled"`
+		TLV     []string `yaml:"tlv"`
+		Delay   struct {
+			Min int `yaml:"min,omitempty"`
+			Max int `yaml:"max,omitempty"`
+		}
 	}
 	DebugNetBuf bool `yaml:"debugNetBuf"`
 }
@@ -82,6 +94,9 @@ func ProcessCMDLine() (p Params) {
 }
 
 func main() {
+	// Init random seed
+	rand.Seed(time.Now().UnixNano())
+
 	pParam := ProcessCMDLine()
 
 	fmt.Println("LogLevel:", pParam.LogLevel.String())
@@ -123,8 +138,8 @@ func main() {
 		}
 	}
 
-	if len(config.Responder.MsgidFormat) > 0 {
-		switch config.Responder.MsgidFormat {
+	if len(config.Responder.MsgID) > 0 {
+		switch config.Responder.MsgID {
 		case "hex":
 			lConfig.MsgidFormat = RESP_MSGID_HEX
 		case "uuid":
@@ -132,7 +147,7 @@ func main() {
 		default:
 			log.WithFields(log.Fields{
 				"type": "smpp-server",
-			}).Fatal("Incorrect value for configuration param responder.msgidFormat [", config.Responder.MsgidFormat, "]")
+			}).Fatal("Incorrect value for configuration param responder.msgidFormat [", config.Responder.MsgID, "]")
 			return
 		}
 	} else {
@@ -140,7 +155,7 @@ func main() {
 	}
 
 	// Preload Receipt TLV values
-	for _, tlv := range config.Responder.TLV {
+	for _, tlv := range config.Deliveryreport.TLV {
 		tEntity := strings.Split(tlv, ";")
 		if len(tEntity) != 3 {
 			log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - should be 3 params")
@@ -303,12 +318,45 @@ func sessionProcessor(s *libsmpp.SMPPSession, config *Config, lConfig *LConfig) 
 			}
 
 			pR := s.EncodeSubmitSmResp(p, 0, rMsgID)
-			s.Outbox <- pR
+
+			// Generate response
+			if (config.Responder.Delay.Min > 0) || (config.Responder.Delay.Max > 0) {
+				// Delayed response
+				msgDelayDelta := config.Responder.Delay.Max - config.Responder.Delay.Min
+				if msgDelayDelta <= 0 {
+					msgDelayDelta = 0
+				} else {
+					msgDelayDelta = rand.Intn(msgDelayDelta)
+				}
+
+				go func(s *libsmpp.SMPPSession, pR libsmpp.SMPPPacket, d time.Duration) {
+					select {
+					case <-time.After(d):
+						s.Outbox <- pR
+					case <-s.Closed:
+					}
+				}(s, pR, time.Duration(config.Responder.Delay.Max+msgDelayDelta)*time.Millisecond)
+			} else {
+				// Instant response
+				s.Outbox <- pR
+			}
 			msgID++
 
-			if config.Responder.DeliveryReport {
+			if config.Deliveryreport.Enabled {
+
+				var msgDelayDelta int
+				if (config.Responder.Delay.Min > 0) || (config.Responder.Delay.Max > 0) {
+					// Delayed response
+					msgDelayDelta = config.Responder.Delay.Max - config.Responder.Delay.Min
+					if msgDelayDelta <= 0 {
+						msgDelayDelta = 0
+					} else {
+						msgDelayDelta = rand.Intn(msgDelayDelta)
+					}
+				}
+
 				// Generate DELIVERY REPORT in a separate go thread
-				go func(p libsmpp.SMPPPacket, dMsgID uint32, rMsgID string, state uint8) {
+				go func(p libsmpp.SMPPPacket, dMsgID uint32, rMsgID string, state uint8, d time.Duration) {
 					pD, err := s.DecodeSubmitDeliverSm(&p)
 					if err != nil {
 						return
@@ -345,8 +393,18 @@ func sessionProcessor(s *libsmpp.SMPPSession, config *Config, lConfig *LConfig) 
 						return
 					}
 
-					s.Outbox <- pE
-				}(p, dMsgID, rMsgID, libsmpp2.STATE_REJECTED)
+					if d > 0 {
+						// Delayed report
+						select {
+						case <-time.After(d):
+							s.Outbox <- pE
+						case <-s.Closed:
+						}
+					} else {
+						// Instant report
+						s.Outbox <- pE
+					}
+				}(p, dMsgID, rMsgID, libsmpp2.STATE_REJECTED, time.Duration(config.Deliveryreport.Delay.Max+msgDelayDelta)*time.Millisecond)
 			}
 
 		case p := <-s.InboxR:

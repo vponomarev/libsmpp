@@ -14,15 +14,31 @@ logging:
     # Incoming Rate (yes/no)
     rate: yes
 
-# Response behaviour
+# Response generation behaviour
 responder:
-  # MSGID Format: hex / uuid
-  msgidFormat: uuid
+  # MSGID Format: hex / uuid [default: hex]
+  msgid: uuid
 
+  # Response packet delay configurationDelay configuration
+  delay:
+    # Minimum delay in MS
+    min: 1000
+
+    # Maximum delay in MS
+    max: 1000
+
+# Delivery report generation behaviour
+deliveryreport:
   # Generate delivery reports: yes/no
-  deliveryReport: yes
+  enabled: yes
   # Generate custom TLV fields
   tlv:
     - 0x0e;   hex;    "01"
     - 0x06;   hex;    "01"
     - 0x1502; string; "79039998877"
+
+  # Configure DELIVER_SM generation delay
+  delay:
+    min: 2000
+    max: 2000
+

@@ -1,10 +1,18 @@
-# Loglevel: trace / debug / info / warning / error / fatal / panic
-logLevel: info
-#logLevel: trace
+#
+# SMPP Dumb Client configuration file
+#
 
+# Logging configuration
+log:
+  # Log level: trace / debug / info / warning / error / fatal / panic
+  level: info
 
-# FLAG: If NetBuf should be printed in case of connection failure
-debugNetBuf: true
+  # Incoming Rate (yes/no)
+  rate: yes
+
+  # FLAG: If NetBuf should be printed in case of connection failure
+  netbuf: true
+
 
 # Profiler configuration [ yes / no ]
 profiler: yes
@@ -13,7 +21,7 @@ profiler: yes
 profilerListen: 127.0.0.1:5800
 
 # Remote IP:port
-remote: 127.0.0.1:2775
+remote: 127.0.0.1:2500
 
 # Bind parameters
 bind:
@@ -41,14 +49,14 @@ message:
     - 0x1900; hex; "0102030405"
 
 # Number of messages to send
-#count: 100000000
-count: 1
+count: 100000000
+#count: 1
 
 # Submission rate
-rate: 40000
+rate: 5000
 
 # Submission TX window
-window: 300
+window: 100
 
 # Should we stay connected after sending messages [ default: no ]
 stayConnected: yes

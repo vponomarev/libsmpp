@@ -19,8 +19,13 @@ import (
 )
 
 type Config struct {
+	Log struct {
+		Level  string `yaml:"level,omitempty"`
+		Rate   bool
+		Netbuf bool `yaml:"netbuf"`
+	}
+
 	Remote         string `yaml:"remote,omitempty"`
-	LogLevel       string `yaml:"logLevel,omitempty"`
 	Profiler       bool   `yaml:"profiler,omitempty"`
 	ProfilerListen string `yaml:"profilerListen,omitempty"`
 	Bind           struct {
@@ -45,10 +50,9 @@ type Config struct {
 		TLV                []string `yaml:"tlv"`
 	}
 
-	DebugNetBuf bool `yaml:"debugNetBuf"`
-	SendCount   uint `yaml:"count"`
-	SendRate    uint `yaml:"rate"`
-	SendWindow  uint `yaml:"window"`
+	SendCount  uint `yaml:"count"`
+	SendRate   uint `yaml:"rate"`
+	SendWindow uint `yaml:"window"`
 
 	StayConnected bool `yaml:"stayConnected,omitempty"`
 }
@@ -128,8 +132,8 @@ func main() {
 	}
 
 	// Load LogLevel from config if present
-	if (len(config.LogLevel) > 0) && (!pParam.Flags.LogLevel) {
-		if l, err := log.ParseLevel(config.LogLevel); err == nil {
+	if (len(config.Log.Level) > 0) && (!pParam.Flags.LogLevel) {
+		if l, err := log.ParseLevel(config.Log.Level); err == nil {
 			pParam.LogLevel = l
 
 			log.SetLevel(pParam.LogLevel)
@@ -182,7 +186,7 @@ func main() {
 	// Init SMPP Session
 	s := &libsmpp.SMPPSession{
 		SessionID:   1,
-		DebugNetBuf: config.DebugNetBuf,
+		DebugNetBuf: config.Log.Netbuf,
 	}
 	s.Init()
 

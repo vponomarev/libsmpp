@@ -1,18 +1,21 @@
-port: 2500
+#
+# SMPP Dumb Server configuration file
+#
 
-# Loglevel: trace / debug / info / warning / error / fatal / panic
-logLevel: info
-#logLevel: trace
-
-# FLAG: If NetBuf should be printed in case of connection failure
-debugNetBuf: true
+# Listening port
+listen: 2500
 
 # Logging configuration
-logging:
-  # Server connection
-  server:
-    # Incoming Rate (yes/no)
-    rate: yes
+log:
+  # Log level: trace / debug / info / warning / error / fatal / panic
+  level: info
+
+  # Incoming Rate (yes/no)
+  rate: yes
+
+  # FLAG: If NetBuf should be printed in case of connection failure
+  netbuf: true
+
 
 # Response generation behaviour
 responder:
@@ -21,23 +24,23 @@ responder:
 
   # Response packet delay configurationDelay configuration
   delay:
-    # Minimum delay in MS
+    # SUBMIT_SM_RESP generation delay: MIN/MAX
     min: 1000
-
-    # Maximum delay in MS
     max: 1000
 
 # Delivery report generation behaviour
 deliveryreport:
   # Generate delivery reports: yes/no
   enabled: yes
+
   # Generate custom TLV fields
   tlv:
+    # Format: TLV_ID (HEX); TLV_TYPE ("hex"/"string"); TLV_VALUE
     - 0x0e;   hex;    "01"
     - 0x06;   hex;    "01"
     - 0x1502; string; "79039998877"
 
-  # Configure DELIVER_SM generation delay
+  # DELIVER_SM generation delay after message is accepted: MIN/MAX
   delay:
     min: 2000
     max: 2000

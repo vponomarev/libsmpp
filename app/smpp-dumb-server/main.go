@@ -22,13 +22,13 @@ const (
 )
 
 type Config struct {
-	Port     int    `yaml:"port,omitempty"`
-	LogLevel string `yaml:"logLevel,omitempty"`
-	Logging  struct {
-		Server struct {
-			Rate bool
-		}
+	Listen int `yaml:"listen,omitempty"`
+	Log    struct {
+		Level  string `yaml:"level,omitempty"`
+		Rate   bool
+		Netbuf bool `yaml:"netbuf"`
 	}
+
 	Responder struct {
 		MsgID string `yaml:"msgid",omitempty`
 		Delay struct {
@@ -45,7 +45,6 @@ type Config struct {
 			Max int `yaml:"max,omitempty"`
 		}
 	}
-	DebugNetBuf bool `yaml:"debugNetBuf"`
 }
 
 // Loaded config
@@ -127,8 +126,8 @@ func main() {
 	}
 
 	// Load LogLevel from config if present
-	if (len(config.LogLevel) > 0) && (!pParam.Flags.LogLevel) {
-		if l, err := log.ParseLevel(config.LogLevel); err == nil {
+	if (len(config.Log.Level) > 0) && (!pParam.Flags.LogLevel) {
+		if l, err := log.ParseLevel(config.Log.Level); err == nil {
 			pParam.LogLevel = l
 
 			log.SetLevel(pParam.LogLevel)
@@ -207,11 +206,11 @@ func main() {
 	}
 
 	// Fill default values for config
-	if config.Port < 1 {
-		config.Port = 2775
+	if config.Listen < 1 {
+		config.Listen = 2775
 	}
 	// Listen socket for new connections
-	lAddr := &net.TCPAddr{IP: net.IPv4(0, 0, 0, 0), Port: config.Port}
+	lAddr := &net.TCPAddr{IP: net.IPv4(0, 0, 0, 0), Port: config.Listen}
 
 	socket, err := net.ListenTCP("tcp4", lAddr)
 	if err != nil {
@@ -239,7 +238,7 @@ func hConn(id uint32, conn *net.TCPConn, config *Config, lConfig *LConfig) {
 		ManualBindValidate: true,
 		DebugLevel:         1,
 		SessionID:          id,
-		DebugNetBuf:        config.DebugNetBuf,
+		DebugNetBuf:        config.Log.Netbuf,
 	}
 	s.Init()
 
@@ -276,7 +275,7 @@ func sessionProcessor(s *libsmpp.SMPPSession, config *Config, lConfig *LConfig) 
 
 	log.WithFields(log.Fields{"type": "smpp-server", "service": "PacketLoop", "SID": s.SessionID, "action": "Start"}).Info("Start message processing")
 
-	if config.Logging.Server.Rate {
+	if config.Log.Rate {
 		go func(msgID *uint32, s *libsmpp.SMPPSession) {
 			var sv uint32
 			sv = 0

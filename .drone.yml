@@ -4,4 +4,6 @@ name: default
 steps:
   - name: test
     image: golang
-    command: 
+    commands:
+      - go test
+      - cd app/smpp-dump-server && go build

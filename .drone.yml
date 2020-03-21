@@ -7,5 +7,5 @@ steps:
     commands:
       - go test
       - pwd && ls -l && cd app/smpp-dumb-server && go build
-      - pwd && ls -l && cd app/smpp-dumb-client && go build
-      - pwd && ls -l && cd app/smpp-lb && go build
+      - pwd && ls -l && cd ../smpp-dumb-client && go build
+      - pwd && ls -l && cd ../smpp-lb && go build

@@ -9,3 +9,4 @@ steps:
       - pwd && ls -l && cd app/smpp-dumb-server && go build
       - pwd && ls -l && cd ../smpp-dumb-client && go build
       - pwd && ls -l && cd ../smpp-lb && go build
+

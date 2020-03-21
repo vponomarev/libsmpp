@@ -5,7 +5,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/vponomarev/libsmpp"
-	libsmpp2 "github.com/vponomarev/libsmpp/const"
+	libsmppConst "github.com/vponomarev/libsmpp/const"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"math/rand"
@@ -403,7 +403,7 @@ func sessionProcessor(s *libsmpp.SMPPSession, config *Config, lConfig *LConfig) 
 						// Instant report
 						s.Outbox <- pE
 					}
-				}(p, dMsgID, rMsgID, libsmpp2.STATE_REJECTED, time.Duration(config.Deliveryreport.Delay.Max+msgDelayDelta)*time.Millisecond)
+				}(p, dMsgID, rMsgID, libsmppConst.STATE_REJECTED, time.Duration(config.Deliveryreport.Delay.Max+msgDelayDelta)*time.Millisecond)
 			}
 
 		case p := <-s.InboxR:

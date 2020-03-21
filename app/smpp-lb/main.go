@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"github.com/vponomarev/libsmpp"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
-	"libsmpp"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -20,23 +20,35 @@ import (
 // FLAG: Stop handling traffic
 var stopCh chan struct{}
 
+type ConfigInterface interface{}
+type ConfigSrvAccount struct {
+	Mode       string
+	SystemID   string `yaml:"systemID"`
+	SystemType string `yaml:"systemType"`
+	Password   string
+	Profile    string
+}
+
 type Config struct {
 	Server struct {
 		Port int
+		//Accounts []ConfigInterface
+		Accounts map[string]ConfigSrvAccount
 	}
-	LogLevel       string `yaml:"logLevel,omitempty"`
+	Log struct {
+		Level  string `yaml:"level,omitempty"`
+		Rate   bool
+		Netbuf bool `yaml:"netbuf"`
+	}
+
 	Profiler       bool   `yaml:"profiler,omitempty"`
 	ProfilerListen string `yaml:"profilerListen,omitempty"`
-	Logging        struct {
-		Server struct {
-			Rate bool
-		}
-	}
+
 	Client struct {
 		Remote string
 	}
 
-	DebugNetBuf bool `yaml:"debugNetBuf"`
+	Clients ConfigInterface
 }
 
 type Params struct {
@@ -94,7 +106,7 @@ func (h *HttpHandler) HttpLogLevel(w http.ResponseWriter, r *http.Request) {
 		if l, err := log.ParseLevel(level); err == nil {
 			log.SetLevel(l)
 			log.WithFields(log.Fields{
-				"type": "smpp-client",
+				"type": "smpp-lb",
 			}).Warning("Override LogLevel to: ", l.String())
 			fmt.Fprintf(w, "OK")
 		} else {
@@ -110,7 +122,7 @@ func (h *HttpHandler) HttpLogRate(w http.ResponseWriter, r *http.Request) {
 	rate := r.FormValue("rate")
 	if len(rate) > 0 {
 		if l, err := strconv.ParseBool(rate); err == nil {
-			h.config.Logging.Server.Rate = l
+			h.config.Log.Rate = l
 			log.WithFields(log.Fields{
 				"type": "smpp-lb",
 			}).Warning("Override LoggingRate to: ", l)
@@ -119,7 +131,7 @@ func (h *HttpHandler) HttpLogRate(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "ERROR:", err)
 		}
 	} else {
-		fmt.Fprintln(w, h.config.Logging.Server.Rate)
+		fmt.Fprintln(w, h.config.Log.Rate)
 	}
 }
 
@@ -161,7 +173,7 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config *Conf
 		ManualBindValidate: true,
 		DebugLevel:         1,
 		SessionID:          id,
-		DebugNetBuf:        config.DebugNetBuf,
+		DebugNetBuf:        config.Log.Netbuf,
 	}
 	s.Init()
 
@@ -175,7 +187,7 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config *Conf
 
 			select {
 			case <-c:
-				if config.Logging.Server.Rate {
+				if config.Log.Rate {
 					sn := p.GetLastTransactionID()
 					if sn > sv {
 						fmt.Println("[", s.SessionID, "] During last 1s: ", sn-sv)
@@ -218,6 +230,22 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config *Conf
 
 }
 
+func convert(i interface{}) interface{} {
+	switch x := i.(type) {
+	case map[interface{}]interface{}:
+		m2 := map[string]interface{}{}
+		for k, v := range x {
+			m2[k.(string)] = convert(v)
+		}
+		return m2
+	case []interface{}:
+		for i, v := range x {
+			x[i] = convert(v)
+		}
+	}
+	return i
+}
+
 func main() {
 	pParam := ProcessCMDLine()
 
@@ -245,15 +273,23 @@ func main() {
 			return
 		}
 	}
+	/*
+		cfg := convert(config.Server.Accounts)
+		if b, err := json.Marshal(cfg); err != nil {
+			panic(err)
+		} else {
+			fmt.Printf("Output: %s\n", b)
+		}
+	*/
 
 	// Load LogLevel from config if present
-	if (len(config.LogLevel) > 0) && (!pParam.Flags.LogLevel) {
-		if l, err := log.ParseLevel(config.LogLevel); err == nil {
+	if (len(config.Log.Level) > 0) && (!pParam.Flags.LogLevel) {
+		if l, err := log.ParseLevel(config.Log.Level); err == nil {
 			pParam.LogLevel = l
 
 			log.SetLevel(pParam.LogLevel)
 			log.WithFields(log.Fields{
-				"type": "smpp-client",
+				"type": "smpp-lb",
 			}).Warning("Override LogLevel to: ", pParam.LogLevel.String())
 		}
 	}
@@ -344,7 +380,7 @@ func outConnect(id uint32, dest *net.TCPAddr, pool *libsmpp.SessionPool, config 
 
 	s := &libsmpp.SMPPSession{
 		SessionID:   id,
-		DebugNetBuf: config.DebugNetBuf,
+		DebugNetBuf: config.Log.Netbuf,
 	}
 	s.Init()
 

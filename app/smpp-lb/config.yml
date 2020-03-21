@@ -1,8 +1,18 @@
-# Loglevel: trace / debug / info / warning / error / fatal / panic
-logLevel: info
+#
+# SMPP Load Balancer configuration file
+#
 
-# FLAG: If NetBuf should be printed in case of connection failure
-debugNetBuf: true
+# Logging configuration
+log:
+  # Log level: trace / debug / info / warning / error / fatal / panic
+  level: info
+
+  # Incoming Rate (yes/no)
+  rate: yes
+
+  # FLAG: If NetBuf should be printed in case of connection failure
+  netbuf: true
+
 
 # Profiler configuration [ yes / no ]
 profiler: yes
@@ -14,16 +24,43 @@ profilerListen: 127.0.0.1:5801
 server:
   # Listen port
   port: 2775
+  accounts:
+    SysID:
+      mode: trx
+      systemID: SysID
+      systemType: ""
+      password: test
+      profile: profile1
+    test:
+      mode: trx
+      systemID: test
+      systemType: test
+      password: test
+      profile: test
 
-# Logging configuration
-logging:
-  # Server connection
-  server:
-    # Incoming Rate (yes/no)
-    rate: yes
 
 # Client configuration
 client:
   # Remote SMSC
   remote: 127.0.0.1:2500
+  bind:
+    systemID: test
+    systemType: test
+    password: test
 
+
+# Client connection configuration
+clients:
+  # Profile1: bind inherit mode
+  "profile1":
+    remote: 127.0.0.1:2500
+    bind:
+      mode: inherit
+  # Test: specific bind configuration
+  "test":
+    remote: 127.0.0.1:2500
+    bind:
+      mode: trx
+      systemid: "test"
+      systemtype: "test"
+      password: "test"

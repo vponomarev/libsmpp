@@ -3,7 +3,7 @@ package libsmpp
 import (
 	"encoding/binary"
 	"fmt"
-	"libsmpp/const"
+	"github.com/vponomarev/libsmpp/const"
 )
 
 func ReadCString(b []byte, maxLen int, fieldName string) (data string, l int, err error) {

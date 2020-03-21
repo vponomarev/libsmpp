@@ -3,7 +3,7 @@ package libsmpp
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"libsmpp/const"
+	"github.com/vponomarev/libsmpp/const"
 	//	"net"
 	// "sync"
 	"time"

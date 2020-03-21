@@ -5,8 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"github.com/vponomarev/libsmpp/const"
 	"io"
-	"libsmpp/const"
 	"net"
 	"time"
 )

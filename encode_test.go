@@ -3,7 +3,7 @@ package libsmpp
 import (
 	"fmt"
 	"github.com/franela/goblin"
-	libsmpp "libsmpp/const"
+	libsmpp "github.com/vponomarev/libsmpp/const"
 	"testing"
 )
 

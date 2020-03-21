@@ -2,7 +2,7 @@ package libsmpp
 
 import (
 	"fmt"
-	"libsmpp/const"
+	"github.com/vponomarev/libsmpp/const"
 	"net"
 	"sync"
 	"time"

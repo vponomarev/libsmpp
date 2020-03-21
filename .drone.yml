@@ -6,4 +6,6 @@ steps:
     image: golang
     commands:
       - go test
-      - pwd && ls -l && cd app/smpp-dump-server && go build
+      - pwd && ls -l && cd app/smpp-dumb-server && go build
+      - pwd && ls -l && cd app/smpp-dumb-client && go build
+      - pwd && ls -l && cd app/smpp-lb && go build

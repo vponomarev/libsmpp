@@ -40,6 +40,9 @@ const (
 	ESME_RINVBNDSTS = 0x00000004
 	ESME_RALYBND    = 0x00000005
 
+	ESME_RINVPASSWD = 0x0000000E
+	ESME_RINVSYSID  = 0x0000000F
+
 	ESME_RSUBMITFAIL = 0x00000045 // submit_sm or submit_multi failed
 	ESME_RX_T_APPN   = 0x00000064 // ESME Receiver Temporary App Error Code
 )

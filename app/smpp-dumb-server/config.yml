@@ -16,6 +16,18 @@ log:
   # FLAG: If NetBuf should be printed in case of connection failure
   netbuf: true
 
+# Authentication information
+accounts:
+  test:
+    mode: trx
+    systemID: test
+    systemType: "test"
+    password: test
+  test01:
+    mode: trx
+    systemID: test01
+    systemType: test01
+    password: test01
 
 # Response generation behaviour
 responder:

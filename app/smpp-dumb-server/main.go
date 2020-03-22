@@ -21,6 +21,13 @@ const (
 	RESP_MSGID_UUID
 )
 
+type ConfigAccount struct {
+	mode       string
+	SystemID   string `yaml:"systemID"`
+	SystemType string `yaml:"systemType"`
+	Password   string
+}
+
 type Config struct {
 	Listen int `yaml:"listen,omitempty"`
 	Log    struct {
@@ -28,6 +35,8 @@ type Config struct {
 		Rate   bool
 		Netbuf bool `yaml:"netbuf"`
 	}
+
+	Accounts map[string]ConfigAccount
 
 	Responder struct {
 		MsgID string `yaml:"msgid",omitempty`
@@ -120,7 +129,7 @@ func main() {
 		} else {
 			log.WithFields(log.Fields{
 				"type": "smpp-server",
-			}).Fatal("Error parsing config file")
+			}).Fatal("Error parsing config file", err)
 			return
 		}
 	}
@@ -202,7 +211,7 @@ func main() {
 				Len:  uint16(len(tV)),
 			},
 		})
-		fmt.Println("TLV [", tlv, "] KEY=", tK, "; VAL[", tV, "]")
+		// fmt.Println("TLV [", tlv, "] KEY=", tK, "; VAL[", tV, "]")
 	}
 
 	// Fill default values for config
@@ -248,10 +257,30 @@ func hConn(id uint32, conn *net.TCPConn, config *Config, lConfig *LConfig) {
 		select {
 		// Request for BIND validation
 		case x := <-s.BindValidator:
+			// Scan for available accounts
+			var errNo uint32
+			errNo = libsmppConst.ESME_RINVSYSID
+
+			for k, v := range config.Accounts {
+				// Check for SystemID + SystemType mapping
+				if (v.SystemID == x.Bind.SystemID) && (v.SystemType == x.Bind.SystemType) {
+					// Validate password
+					if v.Password == x.Bind.Password {
+						// TODO: Validate bind type
+						errNo = libsmppConst.ESME_ROK
+						log.WithFields(log.Fields{"type": "smpp-server", "service": "HandleConnection", "accountID": k}).Warning("Accepting connection for account: ", k)
+						break
+					} else {
+						errNo = libsmppConst.ESME_RINVPASSWD
+						log.WithFields(log.Fields{"type": "smpp-server", "service": "HandleConnection", "accountID": k}).Error("Invalid password for account: ", k)
+					}
+				}
+			}
+
 			r := libsmpp.BindValidatorResponce{
 				ID:     x.ID,
 				SMSCID: "GoLib32",
-				Status: 0,
+				Status: errNo,
 			}
 			s.BindValidatorR <- r
 

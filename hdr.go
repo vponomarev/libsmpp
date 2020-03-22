@@ -173,7 +173,8 @@ type BindValidatorResponce struct {
 
 // SMPP Session
 type SMPPSession struct {
-	SessionID uint32 // Uniq sessionID, used for logging
+	SessionID   uint32 // Uniq sessionID, used for logging
+	SessionName string // SessionName, used for logging
 
 	Cs       connState
 	Bind     SMPPBind

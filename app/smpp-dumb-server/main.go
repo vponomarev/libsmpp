@@ -259,8 +259,7 @@ func hConn(id uint32, conn *net.TCPConn, config *Config, lConfig *LConfig) {
 		case x := <-s.BindValidator:
 			// Scan for available accounts
 			var errNo uint32
-			errNo = libsmppConst.ESME_RINVSYSID
-
+			var lookupState bool
 			for k, v := range config.Accounts {
 				// Check for SystemID + SystemType mapping
 				if (v.SystemID == x.Bind.SystemID) && (v.SystemType == x.Bind.SystemType) {
@@ -268,13 +267,21 @@ func hConn(id uint32, conn *net.TCPConn, config *Config, lConfig *LConfig) {
 					if v.Password == x.Bind.Password {
 						// TODO: Validate bind type
 						errNo = libsmppConst.ESME_ROK
+						s.SessionName = k
+						lookupState = true
 						log.WithFields(log.Fields{"type": "smpp-server", "service": "HandleConnection", "accountID": k}).Warning("Accepting connection for account: ", k)
 						break
 					} else {
 						errNo = libsmppConst.ESME_RINVPASSWD
 						log.WithFields(log.Fields{"type": "smpp-server", "service": "HandleConnection", "accountID": k}).Error("Invalid password for account: ", k)
+						lookupState = true
 					}
 				}
+			}
+
+			if !lookupState {
+				errNo = libsmppConst.ESME_RINVSYSID
+				log.WithFields(log.Fields{"type": "smpp-server", "service": "HandleConnection"}).Error("Unfined SystemID/systemType: [", x.Bind.SystemID, "][", x.Bind.SystemType, "]")
 			}
 
 			r := libsmpp.BindValidatorResponce{

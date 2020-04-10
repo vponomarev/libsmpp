@@ -59,8 +59,9 @@ type Config struct {
 }
 
 type Params struct {
-	LogLevel log.Level
-	Flags    struct {
+	LogLevel       log.Level
+	ConfigFileName string
+	Flags          struct {
 		LogLevel bool
 	}
 }
@@ -76,6 +77,7 @@ type TrackProcessingTime struct {
 func ProcessCMDLine() (p Params) {
 	// Set default
 	p.LogLevel = log.InfoLevel
+	p.ConfigFileName = "config.yml"
 
 	var pv bool
 	var pvn string
@@ -92,10 +94,15 @@ func ProcessCMDLine() (p Params) {
 					p.LogLevel = l
 					p.Flags.LogLevel = true
 				}
+			case "-config":
+				p.ConfigFileName = param
 			}
 		} else {
 			switch param {
 			case "-log":
+				pvn = param
+				pv = true
+			case "-config":
 				pvn = param
 				pv = true
 			}
@@ -108,6 +115,7 @@ func main() {
 	pParam := ProcessCMDLine()
 
 	fmt.Println("LogLevel:", pParam.LogLevel.String())
+	fmt.Println("Config file:", pParam.ConfigFileName)
 
 	log.SetOutput(os.Stdout)
 	log.SetLevel(log.DebugLevel)
@@ -119,13 +127,12 @@ func main() {
 	// Load configuration file
 	config := Config{}
 
-	configFileName := "config.yml"
-	source, err := ioutil.ReadFile(configFileName)
+	source, err := ioutil.ReadFile(pParam.ConfigFileName)
 	if err == nil {
 		if err = yaml.Unmarshal(source, &config); err == nil {
 			log.WithFields(log.Fields{
 				"type": "smpp-client",
-			}).Info("Loaded configuration file: ", configFileName)
+			}).Info("Loaded configuration file: ", pParam.ConfigFileName)
 		} else {
 			fmt.Println("Error loading config file: ", err)
 			return

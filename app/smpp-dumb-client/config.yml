@@ -28,6 +28,8 @@ bind:
   systemID: test
   systemType: test
   password: test
+  # Connection mode: TRX/TX/RX (default: TRX)
+  mode: TRX
 
 # Message submission parameters
 message:
@@ -53,7 +55,7 @@ count: 100000000
 #count: 1
 
 # Submission rate
-rate: 5000
+rate: 5
 
 # Submission TX window
 window: 100

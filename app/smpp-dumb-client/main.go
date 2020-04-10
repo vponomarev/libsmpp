@@ -32,6 +32,7 @@ type Config struct {
 		SystemID   string `yaml:"systemID,omitempty"`
 		SystemType string `yaml:"systemType,omitempty"`
 		Password   string `yaml:"password,omitempty"`
+		Mode       string `yaml:"mode",omitempty`
 	}
 	Message struct {
 		From struct {
@@ -167,6 +168,20 @@ func main() {
 		return
 	}
 
+	// Check bind mode (TRX/TX/RX)
+	var cm libsmpp.ConnSMPPMode
+	switch config.Bind.Mode {
+	case "TX":
+		cm = libsmpp.CSMPPTX
+	case "RX":
+		cm = libsmpp.CSMPPRX
+	case "TRX":
+		cm = libsmpp.CSMPPTRX
+	default:
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Invalid connection mode:", config.Bind.Mode, " (supported only: TX, RX, TRX)")
+		return
+	}
+
 	// Init profiler if enabled
 	if config.Profiler {
 		if len(config.ProfilerListen) == 0 {
@@ -274,7 +289,7 @@ func main() {
 	}
 
 	go s.RunOutgoing(conn, libsmpp.SMPPBind{
-		ConnMode:   libsmpp.CSMPPTRX,
+		ConnMode:   cm,
 		SystemID:   config.Bind.SystemID,
 		Password:   config.Bind.Password,
 		SystemType: config.Bind.SystemType,

@@ -69,7 +69,16 @@ type Params struct {
 	}
 }
 
+type TLVPreserve struct {
+	IsOptional bool
+	ID         libsmpp.TLVCode
+}
+
+// List of pre-defined TLVs for Delivery Reports
 var tlvList []libsmpp.TLVInfo
+
+// List of TLV preservation for Delivery Reports
+var tlvPreserve []TLVPreserve
 
 func ProcessCMDLine() (p Params) {
 	// Set default
@@ -194,7 +203,7 @@ func main() {
 			}
 		} else {
 			if tK, err = strconv.ParseInt(tEntity[0], 10, 16); err != nil {
-				log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - HEX key [", tEntity[0], "]: ", err)
+				log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - DEC key [", tEntity[0], "]: ", err)
 				return
 			}
 		}
@@ -206,6 +215,8 @@ func main() {
 				log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - HEX value [", tEntity[2], "]: ", err)
 				return
 			}
+		case "preserve":
+
 		default:
 			log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - Unsupported value type [", tEntity[1], "]", err)
 			return

@@ -189,12 +189,22 @@ func main() {
 		return
 	}
 
+	// Init SMPP Session
+	s := &libsmpp.SMPPSession{
+		SessionID:   1,
+		DebugNetBuf: config.Log.Netbuf,
+	}
+	s.Init()
+
 	// Init profiler if enabled
 	if config.Profiler {
 		if len(config.ProfilerListen) == 0 {
 			config.ProfilerListen = "127.0.0.1:5800"
 		}
 		log.WithFields(log.Fields{"type": "smpp-client", "action": "profiler"}).Info("Starting profiler at: ", config.ProfilerListen)
+
+		hh := &HttpHandler{s: s, config: &config}
+		http.HandleFunc("/getInfo", hh.StatsGetInfo)
 
 		go func(addr string) {
 			err := http.ListenAndServe(addr, nil)
@@ -204,13 +214,6 @@ func main() {
 			}
 		}(config.ProfilerListen)
 	}
-
-	// Init SMPP Session
-	s := &libsmpp.SMPPSession{
-		SessionID:   1,
-		DebugNetBuf: config.Log.Netbuf,
-	}
-	s.Init()
 
 	// Prepare SUBMIT_SM packet if specified
 	oP := libsmpp.SMPPSubmit{
@@ -460,6 +463,13 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, T
 				}
 				lastInfoReport = time.Now()
 				fmt.Println("[", s.SessionID, "] During last", reportDiff, "ms:", int64(msgLastSec)*1000/reportDiff, "[MAX:", done, "][TX:", txQ, "][RX:", rxQ, "][RTDavg micros: ", tAvg, ",", tCnt, "]")
+				se := StatsEntry{
+					T:         lastInfoReport,
+					Rate:      uint(int64(msgLastSec) * 1000 / reportDiff),
+					SentCount: done,
+				}
+
+				postStats(se)
 				msgLastSec = 0
 			}
 

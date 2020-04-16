@@ -37,8 +37,8 @@ responder:
   # Response packet delay configurationDelay configuration
   delay:
     # SUBMIT_SM_RESP generation delay: MIN/MAX
-    min: 1000
-    max: 1000
+    min: 1
+    max: 1
 
 # Delivery report generation behaviour
 deliveryreport:
@@ -51,6 +51,7 @@ deliveryreport:
     - 0x0e;   hex;    "01"
     - 0x06;   hex;    "01"
     - 0x1502; string; "79039998877"
+    #- 0x1900; preserve; 0x1900
 
   # DELIVER_SM generation delay after message is accepted: MIN/MAX
   delay:

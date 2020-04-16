@@ -55,10 +55,10 @@ count: 100000000
 #count: 1
 
 # Submission rate
-rate: 5
+rate: 15000
 
 # Submission TX window
-window: 100
+window: 2000
 
 # Should we stay connected after sending messages [ default: no ]
 stayConnected: yes

@@ -310,6 +310,12 @@ func main() {
 	// Handle `SEND COMPLETE` event
 	SendCompleteCH := make(chan interface{})
 
+	//
+	lastRXReportTime := time.Now()
+	lastRXReportUnix := lastRXReportTime.Unix()
+	var lastRXCount uint
+	var totalRXCount uint
+
 	for {
 		select {
 		case x := <-s.Status:
@@ -326,6 +332,20 @@ func main() {
 
 			// Generate confirmation for DeliverSM
 			if x.Hdr.ID == libsmppConst.CMD_DELIVER_SM {
+				// Calculate number of received messages per second
+				if time.Now().Unix() > lastRXReportUnix {
+					postUpdateStats(StatsEntry{
+						T:         lastRXReportTime,
+						RecvRate:  lastRXCount,
+						RecvCount: totalRXCount,
+					})
+					lastRXReportTime = time.Now()
+					lastRXReportUnix = lastRXReportTime.Unix()
+					lastRXCount = 0
+				}
+
+				lastRXCount++
+				totalRXCount++
 				s.Outbox <- s.EncodeDeliverSmResp(x, libsmppConst.ESME_ROK)
 			}
 
@@ -465,11 +485,12 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, T
 				fmt.Println("[", s.SessionID, "] During last", reportDiff, "ms:", int64(msgLastSec)*1000/reportDiff, "[MAX:", done, "][TX:", txQ, "][RX:", rxQ, "][RTDavg micros: ", tAvg, ",", tCnt, "]")
 				se := StatsEntry{
 					T:         lastInfoReport,
-					Rate:      uint(int64(msgLastSec) * 1000 / reportDiff),
+					SentRate:  uint(int64(msgLastSec) * 1000 / reportDiff),
 					SentCount: done,
+					SentRTD:   uint(tAvg),
 				}
 
-				postStats(se)
+				postUpdateStats(se)
 				msgLastSec = 0
 			}
 

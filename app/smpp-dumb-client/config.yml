@@ -40,7 +40,8 @@ message:
   to:
     ton: 1
     npi: 1
-    addr: 79032496449
+    addr: 7903249####
+    istemplate: yes   # This is template, "#" will be replaced by random [0..9] char
   registeredDelivery: 1
   dataCoding: 1
   body: "This is message for sending"

@@ -130,6 +130,9 @@
                                 }
                                 chart.redraw();
                                 setTimeout(getData, 5000, chart, lastT)
+                            }).fail(function() {
+                                ShowInfo("Error periodical page load, try to resolve ...");
+                                setTimeout(getData, 5000, chart, lastT)
                             })
                         }
                         getData(this, lastT);

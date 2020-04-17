@@ -8,6 +8,7 @@ import (
 	libsmppConst "github.com/vponomarev/libsmpp/const"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -41,9 +42,10 @@ type Config struct {
 			Addr string `yaml:"addr"`
 		}
 		To struct {
-			TON  int    `yaml:"ton"`
-			NPI  int    `yaml:"npi"`
-			Addr string `yaml:"addr"`
+			TON        int    `yaml:"ton"`
+			NPI        int    `yaml:"npi"`
+			Addr       string `yaml:"addr"`
+			IsTemplate bool   `yaml:"istemplate"`
 		}
 		RegisteredDelivery int      `yaml:"registeredDelivery"`
 		DataCoding         int      `yaml:"dataCoding"`
@@ -325,7 +327,7 @@ func main() {
 
 				// Start packet submission
 				log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "SendPacket", "count": config.SendCount, "rate": config.SendRate}).Info("Start message bulk message submission")
-				go PacketSender(s, rP, config, &TimeTracker, SendCompleteCH)
+				go PacketSender(s, rP, oP, config, &TimeTracker, SendCompleteCH)
 			}
 
 		case x := <-s.Inbox:
@@ -372,7 +374,7 @@ func main() {
 }
 
 // Send messages
-func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, TimeTracker *TrackProcessingTime, SendCompleteCH chan interface{}) {
+func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, ps libsmpp.SMPPSubmit, config Config, TimeTracker *TrackProcessingTime, SendCompleteCH chan interface{}) {
 	// Sleep for 3s after finishing sending and close trigger channel
 	defer func(config Config) {
 		if config.StayConnected {
@@ -449,7 +451,30 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, T
 			var i uint
 			if !skipSend {
 				for ; (i < tickBlock) && (done < config.SendCount); i++ {
+
+					// Process templated messages
+					if config.Message.To.IsTemplate {
+						randRunes := []rune("0123456789")
+
+						// Activate replacement only in case of template data
+						if cRnd := strings.Count(config.Message.To.Addr, "#"); cRnd > 0 {
+							da := config.Message.To.Addr
+							for ; cRnd > 0; cRnd-- {
+								da = strings.Replace(da, "#", string(randRunes[rand.Intn(len(randRunes))]), 1)
+							}
+							ps.Dest.Addr = da
+
+							var rErr error
+							p, rErr = s.EncodeSubmitSm(ps)
+							if rErr != nil {
+								log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error encoding packet body in message loop")
+								return
+							}
+
+						}
+					}
 					p.CreateTime = time.Now()
+
 					s.Outbox <- p
 					msgLastSec++
 					done++

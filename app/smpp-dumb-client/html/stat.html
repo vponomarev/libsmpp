@@ -128,6 +128,7 @@
                                         // series.addPoint([item.UT * 1000, item.SentRate], false, true)
                                     })
                                 }
+                                ShowInfo("Load complete at: ", Date())
                                 chart.redraw();
                                 setTimeout(getData, 5000, chart, lastT)
                             }).fail(function() {

@@ -696,7 +696,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 		// UNBIND
 		case libsmpp.CMD_UNBIND:
 			// Unbind requst, drop connection
-			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "PacketLoop", "action": "UNBIND", "seq": p.Hdr.Seq}).Debug("Received")
+			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "PacketLoop", "action": "UNBIND", "seq": p.Hdr.Seq}).Warn("Received")
 			return
 
 		// =============================================================

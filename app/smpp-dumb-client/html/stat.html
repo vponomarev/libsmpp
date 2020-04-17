@@ -3,7 +3,7 @@
     <style type="text/css">
         .highcharts-figure, .highcharts-data-table table {
             min-width: 360px;
-            max-width: 800px;
+            max-width: 1600px;
             margin: 1em auto;
         }
 
@@ -55,7 +55,7 @@
 </script>
 
 <script type="application/javascript">
-    let MAX_DATA_REC_COUNT = 100;
+    let MAX_DATA_REC_COUNT = 150;
 
     data = [];
     /*
@@ -70,22 +70,28 @@
     $.get("/getInfo", function(data) {
         console.log(data)
         if (Array.isArray(data)) {
-            gData = [];
+            gData1 = [];
+            gData2 = [];
+            gData3 = [];
             if ((data.length > 0) && (data.length < MAX_DATA_REC_COUNT)) {
                 // Need to add extra data at the beginning of array
                 let MinDate = data[0].UT;
                 let cnt = MAX_DATA_REC_COUNT - data.length + 1;
                 console.log("# Adding trailing ", cnt, "recs")
                 for (i=1; i < cnt; i++) {
-                    gData.unshift([(MinDate - i) * 1000, 0, 0])
+                    gData1.unshift([(MinDate - i) * 1000, 0])
+                    gData2.unshift([(MinDate - i) * 1000, 0])
+                    gData3.unshift([(MinDate - i) * 1000, 0])
                 }
             }
             data.forEach(function(item){
-                gData.push([item.UT * 1000, item.SentRate, item.RecvRate])
+                gData1.push([item.UT * 1000, item.SentRate])
+                gData2.push([item.UT * 1000, item.RecvRate])
+                gData3.push([item.UT * 1000, item.SentRTD])
             });
             ShowInfo("Data ready, loading chart")
-            console.log("Resulting items: ", gData)
-            doLoadChart(gData)
+            console.log("Resulting items: ", gData1, gData2, gData3)
+            doLoadChart(gData1, gData2, gData3)
         } else {
             ShowInfo("Incorrect answer from backend")
         }
@@ -94,7 +100,7 @@
     });
 
 
-    function doLoadChart(data) {
+    function doLoadChart(data1, data2, data3) {
         console.time('line');
         Highcharts.chart('container', {
             chart: {
@@ -116,6 +122,7 @@
                                         if (item.UT >= lastT) {
                                             chart.series[0].addPoint([item.UT * 1000, item.SentRate], false, false)
                                             chart.series[1].addPoint([item.UT * 1000, item.RecvRate], false, false)
+                                            chart.series[2].addPoint([item.UT * 1000, item.SentRTD], false, false)
                                             lastT = item.UT
                                         }
                                         // series.addPoint([item.UT * 1000, item.SentRate], false, true)
@@ -133,17 +140,43 @@
             // subtitle:   {   text: 'Using the Boost module'             },
             // tooltip:    {   valueDecimals: 2                           },
             xAxis: {type: 'datetime'},
-            yAxis: {min: 0, tickAmount: 15},
+            yAxis: [
+                {   labels: {
+                        format: '{value}',
+                    },
+                    title: {
+                        text: 'Sent/Recv rate (TPS)',
+                    },
+                    min: 0,
+                    tickAmount: 15
+                },
+                {   labels: {
+                        format: '{value} ms',
+                    },
+                    title: {
+                        text: 'Round Trip Delay',
+                    },
+                    opposite: true,
+                    min: 0,
+                    tickAmount: 15
+                }
+            ],
             series: [{
-                data: data,
+                data: data1,
                 lineWidth: 0.5,
                 name: 'Sent count'
             },
-                {
-                    data: data,
-                    lineWidth: 0.5,
-                    name: 'Recv count',
-                }],
+            {
+                data: data2,
+                lineWidth: 0.5,
+                name: 'Recv count',
+            },
+            {
+                data: data3,
+                yAxis: 1,
+                lineWidth: 0.5,
+                name: 'Sent RTD',
+            }],
             time: {
                 useUTC: false
             },

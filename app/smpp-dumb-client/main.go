@@ -491,7 +491,7 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, config Config, T
 					T:         lastInfoReport,
 					SentRate:  uint(int64(msgLastSec) * 1000 / reportDiff),
 					SentCount: done,
-					SentRTD:   uint(tAvg),
+					SentRTD:   uint(tAvg / 1000), // Convert from Microseconds to Milliseconds
 				}
 
 				postUpdateStats(se)

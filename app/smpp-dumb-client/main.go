@@ -205,6 +205,7 @@ func main() {
 
 		hh := &HttpHandler{s: s, config: &config}
 		http.HandleFunc("/getInfo", hh.StatsGetInfo)
+		http.HandleFunc("/stat", hh.StatPage)
 
 		go func(addr string) {
 			err := http.ListenAndServe(addr, nil)
@@ -360,6 +361,9 @@ func main() {
 
 		case <-s.Closed:
 			log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "close"}).Warning("Connection is closed")
+
+			// Sleep 500ms to complete Ring Buffer print process
+			time.Sleep(500 * time.Millisecond)
 			return
 		case <-SendCompleteCH:
 			s.Close("Send complete")

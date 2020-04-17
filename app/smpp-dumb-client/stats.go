@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const MaxStatsEntries = 30
+const MaxStatsEntries = 180
 
 type StatsEntry struct {
 	UT        int64
@@ -80,9 +80,14 @@ func postUpdateStats(se StatsEntry) {
 func reportStats() string {
 	statsLog.mtx.RLock()
 	defer statsLog.mtx.RUnlock()
-	b, err := json.Marshal(statsLog.List)
-	if err != nil {
-		return "{ \"error\": \"Failed to map JSON result\"} "
+	if len(statsLog.List) > 1 {
+		// Strip last record, because it can be incomplete
+		b, err := json.Marshal(statsLog.List[:len(statsLog.List)-1])
+		if err != nil {
+			return "{ \"error\": \"Failed to map JSON result\"} "
+		}
+		return string(b)
+	} else {
+		return "[]"
 	}
-	return string(b)
 }

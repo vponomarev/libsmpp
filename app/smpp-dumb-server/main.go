@@ -72,6 +72,7 @@ type Params struct {
 type TLVPreserve struct {
 	IsOptional bool
 	ID         libsmpp.TLVCode
+	OrigID     libsmpp.TLVCode
 }
 
 // List of pre-defined TLVs for Delivery Reports
@@ -181,13 +182,18 @@ func main() {
 	// Preload Receipt TLV values
 	for _, tlv := range config.Deliveryreport.TLV {
 		tEntity := strings.Split(tlv, ";")
-		if len(tEntity) != 3 {
-			log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - should be 3 params")
+		if len(tEntity) < 3 || len(tEntity) > 4 {
+			log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - should be 3 or 4 params")
 			return
 		}
 
+		// Remove spaces
+		for tK, tV := range tEntity {
+			tEntity[tK] = strings.Trim(tV, " ")
+		}
+
 		tVal := strings.Trim(tEntity[2], " ")
-		if tVal[0] != '"' || tVal[len(tVal)-1] != '"' {
+		if (tVal[0] != '"' || tVal[len(tVal)-1] != '"') && (strings.Trim(tEntity[1], " ") != "preserve") {
 			log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - take value into quotes")
 			return
 		}
@@ -210,12 +216,38 @@ func main() {
 		switch strings.Trim(tEntity[1], " ") {
 		case "string":
 			tV = []byte(tVal)
+
 		case "hex":
 			if tV, err = hex.DecodeString(tVal); err != nil {
 				log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - HEX value [", tEntity[2], "]: ", err)
 				return
 			}
+
 		case "preserve":
+			// Parse ORIG_TLV_ID
+			if len(tEntity[2]) > 0 {
+				if tK, err = strconv.ParseInt(tEntity[2], 0, 16); err != nil {
+					log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - ORIG_TLV_ID value [", tEntity[2], "]: ", err)
+				}
+			}
+
+			// Parse FLAG_OPTIONAL
+			var tO bool
+			if len(tEntity) == 4 {
+				switch tEntity[3] {
+				case "yes":
+					tO = true
+				case "no":
+				default:
+					log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - FLAG_OPTIONAL value [", tEntity[3], "]: ", err)
+				}
+			}
+			tlvPreserve = append(tlvPreserve, TLVPreserve{
+				IsOptional: tO,
+				ID:         libsmpp.TLVCode(tK),
+				OrigID:     libsmpp.TLVCode(uint16(tK)),
+			})
+			continue
 
 		default:
 			log.WithFields(log.Fields{"type": "smpp-server"}).Fatal("Error parsing TLV [", tlv, "] - Unsupported value type [", tEntity[1], "]", err)
@@ -419,6 +451,9 @@ func sessionProcessor(s *libsmpp.SMPPSession, config *Config, lConfig *LConfig) 
 					pD.Source = pD.Dest
 					pD.Dest = ax
 
+					// Preserve original TLVs
+					OrigTLV := pD.TLV
+
 					// Fill Message Text
 					tText := (time.Now()).Format("0601021504")
 					pD.ShortMessages = fmt.Sprintf("id:%010d sub:001 dlvrd:001 submit date:%10s done date:%10s stat:%7s err:%3s text:", dMsgID, tText, tText, libsmpp.StateName(state), "000")
@@ -441,6 +476,22 @@ func sessionProcessor(s *libsmpp.SMPPSession, config *Config, lConfig *LConfig) 
 						Data: []byte{state},
 						Len:  1,
 					}
+
+					// Preserved fields
+					for _, v := range tlvPreserve {
+						oV, ok := OrigTLV[v.OrigID]
+						if ok {
+							pD.TLV[v.ID] = oV
+						} else {
+							if !v.IsOptional {
+								pD.TLV[v.ID] = libsmpp.TLVStruct{
+									Data: nil,
+									Len:  0,
+								}
+							}
+						}
+					}
+
 					pE, err := s.EncodeDeliverSm(pD)
 					if err != nil {
 						return

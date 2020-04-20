@@ -51,7 +51,8 @@ deliveryreport:
     - 0x0e;   hex;    "01"
     - 0x06;   hex;    "01"
     - 0x1502; string; "79039998877"
-    #- 0x1900; preserve; 0x1900
+    # Configuration for TLV preserve function: TLV_ID (HEX); TLV_TYPE ("preserve"); ORIG_TLV_ID; FLAG_OPTIONAL (yes/no)
+    - 0x1900; preserve; 0x1900; yes
 
   # DELIVER_SM generation delay after message is accepted: MIN/MAX
   delay:

@@ -42,10 +42,10 @@ type Config struct {
 			Addr string `yaml:"addr"`
 		}
 		To struct {
-			TON        int    `yaml:"ton"`
-			NPI        int    `yaml:"npi"`
-			Addr       string `yaml:"addr"`
-			IsTemplate bool   `yaml:"istemplate"`
+			TON      int    `yaml:"ton"`
+			NPI      int    `yaml:"npi"`
+			Addr     string `yaml:"addr"`
+			Template bool   `yaml:"template"`
 		}
 		RegisteredDelivery int      `yaml:"registeredDelivery"`
 		DataCoding         int      `yaml:"dataCoding"`
@@ -452,8 +452,8 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, ps libsmpp.SMPPS
 			if !skipSend {
 				for ; (i < tickBlock) && (done < config.SendCount); i++ {
 
-					// Process templated messages
-					if config.Message.To.IsTemplate {
+					// Process messages with templates
+					if config.Message.To.Template {
 						randRunes := []rune("0123456789")
 
 						// Activate replacement only in case of template data

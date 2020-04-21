@@ -76,6 +76,14 @@ type TrackProcessingTime struct {
 	sync.RWMutex
 }
 
+type TLVDynamic struct {
+	ID       libsmpp.TLVCode
+	Template string
+}
+
+// List of TLV preservation for Delivery Reports
+var tlvDynamic []TLVDynamic
+
 func ProcessCMDLine() (p Params) {
 	// Set default
 	p.LogLevel = log.InfoLevel
@@ -259,7 +267,7 @@ func main() {
 			}
 		} else {
 			if tK, err = strconv.ParseInt(tEntity[0], 10, 16); err != nil {
-				log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - HEX key [", tEntity[0], "]: ", err)
+				log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - DEC key [", tEntity[0], "]: ", err)
 				return
 			}
 		}
@@ -271,6 +279,13 @@ func main() {
 				log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - HEX value [", tEntity[2], "]: ", err)
 				return
 			}
+		case "dynamic":
+			tlvDynamic = append(tlvDynamic, TLVDynamic{
+				ID:       libsmpp.TLVCode(tK),
+				Template: tVal,
+			})
+			fmt.Println("TLV [", tlv, "] KEY=", tK, "; DYNAMIC[", tVal, "]")
+			continue
 		default:
 			log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - Unsupported value type [", tEntity[1], "]", err)
 			return
@@ -327,7 +342,7 @@ func main() {
 
 				// Start packet submission
 				log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "SendPacket", "count": config.SendCount, "rate": config.SendRate}).Info("Start message bulk message submission")
-				go PacketSender(s, rP, oP, config, &TimeTracker, SendCompleteCH)
+				go PacketSender(s, rP, oP, tlvDynamic, config, &TimeTracker, SendCompleteCH)
 			}
 
 		case x := <-s.Inbox:
@@ -374,7 +389,7 @@ func main() {
 }
 
 // Send messages
-func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, ps libsmpp.SMPPSubmit, config Config, TimeTracker *TrackProcessingTime, SendCompleteCH chan interface{}) {
+func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, ps libsmpp.SMPPSubmit, tlvDynamic []TLVDynamic, config Config, TimeTracker *TrackProcessingTime, SendCompleteCH chan interface{}) {
 	// Sleep for 3s after finishing sending and close trigger channel
 	defer func(config Config) {
 		if config.StayConnected {
@@ -452,26 +467,48 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, ps libsmpp.SMPPS
 			if !skipSend {
 				for ; (i < tickBlock) && (done < config.SendCount); i++ {
 
-					// Process messages with templates
-					if config.Message.To.Template {
-						randRunes := []rune("0123456789")
+					// Dynamically generate message if:
+					// - TO is templated
+					// - There're TLV Dynamic fields
+					if config.Message.To.Template || (len(tlvDynamic) > 0) {
+						// Prepare new packet instance
+						pN := ps
 
-						// Activate replacement only in case of template data
-						if cRnd := strings.Count(config.Message.To.Addr, "#"); cRnd > 0 {
-							da := config.Message.To.Addr
-							for ; cRnd > 0; cRnd-- {
-								da = strings.Replace(da, "#", string(randRunes[rand.Intn(len(randRunes))]), 1)
+						// Process TO number template
+						if config.Message.To.Template {
+							randRunes := []rune("0123456789")
+
+							// Activate replacement only in case of template data
+							if cRnd := strings.Count(config.Message.To.Addr, "#"); cRnd > 0 {
+								da := config.Message.To.Addr
+								for ; cRnd > 0; cRnd-- {
+									da = strings.Replace(da, "#", string(randRunes[rand.Intn(len(randRunes))]), 1)
+								}
+								pN.Dest.Addr = da
 							}
-							ps.Dest.Addr = da
-
-							var rErr error
-							p, rErr = s.EncodeSubmitSm(ps)
-							if rErr != nil {
-								log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error encoding packet body in message loop")
-								return
-							}
-
 						}
+
+						// Add DYNAMIC TLV fields
+						for _, dV := range tlvDynamic {
+							tData := dV.Template
+							if strings.Contains(tData, "{timestamp}") {
+								tData = strings.ReplaceAll(tData, "{timestamp}", strconv.FormatInt(time.Now().Unix(), 10))
+							}
+
+							pN.TLV[dV.ID] = libsmpp.TLVStruct{
+								Data: []byte(tData),
+								Len:  uint16(len(tData)),
+							}
+						}
+
+						// Encode SubmitSM packet
+						var rErr error
+						p, rErr = s.EncodeSubmitSm(pN)
+						if rErr != nil {
+							log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error encoding packet body in message loop")
+							return
+						}
+
 					}
 					p.CreateTime = time.Now()
 

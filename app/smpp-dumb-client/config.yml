@@ -49,7 +49,9 @@ message:
 # List of TLV fields, structure: CODE; TYPE; VALUE
     - 0x1880; string; "App.Name.Rec"
     - 0x1890; string; "Record Data"
-    - 0x1900; hex; "0102030405"
+    #- 0x1900; hex; "0102030405"
+    # type "dynamic" : value is generated dynamically, using templates
+    - 0x1900; dynamic; "{timestamp}"
 
 # Number of messages to send
 count: 100000000

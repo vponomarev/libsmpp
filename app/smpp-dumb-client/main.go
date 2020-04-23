@@ -444,6 +444,10 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, ps libsmpp.SMPPS
 			if tickCouter == 0 {
 				lastInfoReport = time.Now()
 				firstInfoReport = time.Now()
+
+				// Don't sent anything during first tick
+				tickCouter++
+				continue
 			}
 
 			tickCouter++

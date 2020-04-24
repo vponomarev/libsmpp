@@ -121,6 +121,81 @@ func ProcessCMDLine() (p Params) {
 	return p
 }
 
+// Prepare SMPPSubmit structure for stress message generation
+func prepareSubmit(config Config) (oP libsmpp.SMPPSubmit, err error) {
+	// Prepare SUBMIT_SM packet if specified
+	oP = libsmpp.SMPPSubmit{
+		ServiceType: "",
+		Source: libsmpp.SMPPAddress{
+			TON:  uint8(config.Message.From.TON),
+			NPI:  uint8(config.Message.From.NPI),
+			Addr: config.Message.From.Addr,
+		},
+		Dest: libsmpp.SMPPAddress{
+			TON:  uint8(config.Message.To.TON),
+			NPI:  uint8(config.Message.To.NPI),
+			Addr: config.Message.To.Addr,
+		},
+		ShortMessages:      config.Message.Body,
+		RegisteredDelivery: uint8(config.Message.RegisteredDelivery),
+		TLV:                map[libsmpp.TLVCode]libsmpp.TLVStruct{},
+	}
+	for _, tlv := range config.Message.TLV {
+		tEntity := strings.Split(tlv, ";")
+		if len(tEntity) != 3 {
+			err = fmt.Errorf("error parsing TLV [%s] - should be 3 params", tlv)
+			return
+		}
+
+		tVal := strings.Trim(tEntity[2], " ")
+		if tVal[0] != '"' || tVal[len(tVal)-1] != '"' {
+			err = fmt.Errorf("error parsing TLV [%s] - take value into quotes", tlv)
+			return
+		}
+		tVal = strings.Trim(tVal, "\"")
+
+		var tK int64
+		var tV []byte
+		if (len(tEntity[0]) > 2) && (tEntity[0][0:2] == "0x") {
+			if tK, err = strconv.ParseInt(tEntity[0][2:], 16, 16); err != nil {
+				err = fmt.Errorf("error parsing TLV [%s] - HEX key [%s]: %v", tlv, tEntity[0], err)
+				return
+			}
+		} else {
+			if tK, err = strconv.ParseInt(tEntity[0], 10, 16); err != nil {
+				err = fmt.Errorf("error parsing TLV [%s] - DEC key [%s]: %v", tlv, tEntity[0], err)
+				return
+			}
+		}
+		switch strings.Trim(tEntity[1], " ") {
+		case "string":
+			tV = []byte(tVal)
+		case "hex":
+			if tV, err = hex.DecodeString(tVal); err != nil {
+				err = fmt.Errorf("error parsing TLV [%s] - HEX value [%s]: %v", tlv, tEntity[2], err)
+				return
+			}
+		case "dynamic":
+			tlvDynamic = append(tlvDynamic, TLVDynamic{
+				ID:       libsmpp.TLVCode(tK),
+				Template: tVal,
+			})
+			fmt.Println("TLV [", tlv, "] KEY=", tK, "; DYNAMIC[", tVal, "]")
+			continue
+		default:
+			err = fmt.Errorf("error parsing TLV [%s] - Unsupported value type [%s]: %v", tlv, tEntity[1], err)
+			return
+		}
+		oP.TLV[libsmpp.TLVCode(tK)] = libsmpp.TLVStruct{
+			Data: tV,
+			Len:  uint16(len(tV)),
+		}
+		fmt.Println("TLV [", tlv, "] KEY=", tK, "; VAL[", tV, "]")
+
+	}
+	return
+}
+
 func main() {
 	pParam := ProcessCMDLine()
 
@@ -130,24 +205,22 @@ func main() {
 	log.SetOutput(os.Stdout)
 	log.SetLevel(log.DebugLevel)
 
-	log.WithFields(log.Fields{
-		"type": "smpp-client",
-	}).Info("Start")
+	log.WithFields(log.Fields{"type": "smpp-client"}).Info("Start")
 
 	// Load configuration file
 	config := Config{}
 
 	source, err := ioutil.ReadFile(pParam.ConfigFileName)
-	if err == nil {
-		if err = yaml.Unmarshal(source, &config); err == nil {
-			log.WithFields(log.Fields{
-				"type": "smpp-client",
-			}).Info("Loaded configuration file: ", pParam.ConfigFileName)
-		} else {
-			fmt.Println("Error loading config file: ", err)
-			return
-		}
+	if err != nil {
+		fmt.Println("Cannot read config file [", pParam.ConfigFileName, "]")
+		return
 	}
+
+	if err = yaml.Unmarshal(source, &config); err != nil {
+		fmt.Println("Error parsing config file [", pParam.ConfigFileName, "]:", err)
+		return
+	}
+	log.WithFields(log.Fields{"type": "smpp-client"}).Info("Loaded configuration file: ", pParam.ConfigFileName)
 
 	// Load LogLevel from config if present
 	if (len(config.Log.Level) > 0) && (!pParam.Flags.LogLevel) {
@@ -155,9 +228,7 @@ func main() {
 			pParam.LogLevel = l
 
 			log.SetLevel(pParam.LogLevel)
-			log.WithFields(log.Fields{
-				"type": "smpp-client",
-			}).Warning("Override LogLevel to: ", pParam.LogLevel.String())
+			log.WithFields(log.Fields{"type": "smpp-client"}).Warning("Override LogLevel to: ", pParam.LogLevel.String())
 		}
 	}
 
@@ -168,11 +239,6 @@ func main() {
 		return
 	}
 
-	// Check if Bind parameters are set (systemID at least)
-	if len(config.Bind.SystemID) < 1 {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("bind/systemID is not specified")
-		return
-	}
 	remoteIP := net.ParseIP(remote[0])
 	if remoteIP == nil {
 		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Invalid destination IP:", remote[0])
@@ -182,6 +248,12 @@ func main() {
 	remotePort, err := strconv.ParseUint(remote[1], 10, 16)
 	if err != nil {
 		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Invalid destination Port:", remote[1])
+		return
+	}
+
+	// Check if Bind parameters are set (systemID at least)
+	if len(config.Bind.SystemID) < 1 {
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("bind/systemID is not specified")
 		return
 	}
 
@@ -227,81 +299,15 @@ func main() {
 	}
 
 	// Prepare SUBMIT_SM packet if specified
-	oP := libsmpp.SMPPSubmit{
-		ServiceType: "",
-		Source: libsmpp.SMPPAddress{
-			TON:  uint8(config.Message.From.TON),
-			NPI:  uint8(config.Message.From.NPI),
-			Addr: config.Message.From.Addr,
-		},
-		Dest: libsmpp.SMPPAddress{
-			TON:  uint8(config.Message.To.TON),
-			NPI:  uint8(config.Message.To.NPI),
-			Addr: config.Message.To.Addr,
-		},
-		ShortMessages:      config.Message.Body,
-		RegisteredDelivery: uint8(config.Message.RegisteredDelivery),
-		TLV:                map[libsmpp.TLVCode]libsmpp.TLVStruct{},
-	}
-	for _, tlv := range config.Message.TLV {
-		tEntity := strings.Split(tlv, ";")
-		if len(tEntity) != 3 {
-			log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - should be 3 params")
-			return
-		}
-
-		tVal := strings.Trim(tEntity[2], " ")
-		if tVal[0] != '"' || tVal[len(tVal)-1] != '"' {
-			log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - take value into quotes")
-			return
-		}
-		tVal = strings.Trim(tVal, "\"")
-
-		var tK int64
-		var tV []byte
-		var err error
-		if (len(tEntity[0]) > 2) && (tEntity[0][0:2] == "0x") {
-			if tK, err = strconv.ParseInt(tEntity[0][2:], 16, 16); err != nil {
-				log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - HEX key [", tEntity[0], "]: ", err)
-				return
-			}
-		} else {
-			if tK, err = strconv.ParseInt(tEntity[0], 10, 16); err != nil {
-				log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - DEC key [", tEntity[0], "]: ", err)
-				return
-			}
-		}
-		switch strings.Trim(tEntity[1], " ") {
-		case "string":
-			tV = []byte(tVal)
-		case "hex":
-			if tV, err = hex.DecodeString(tVal); err != nil {
-				log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - HEX value [", tEntity[2], "]: ", err)
-				return
-			}
-		case "dynamic":
-			tlvDynamic = append(tlvDynamic, TLVDynamic{
-				ID:       libsmpp.TLVCode(tK),
-				Template: tVal,
-			})
-			fmt.Println("TLV [", tlv, "] KEY=", tK, "; DYNAMIC[", tVal, "]")
-			continue
-		default:
-			log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error parsing TLV [", tlv, "] - Unsupported value type [", tEntity[1], "]", err)
-			return
-		}
-		oP.TLV[libsmpp.TLVCode(tK)] = libsmpp.TLVStruct{
-			Data: tV,
-			Len:  uint16(len(tV)),
-		}
-		fmt.Println("TLV [", tlv, "] KEY=", tK, "; VAL[", tV, "]")
-
+	var oP libsmpp.SMPPSubmit
+	if oP, err = prepareSubmit(config); err != nil {
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error loading submit parameters: ", err)
+		return
 	}
 
-	// Encode packet
-	rP, rErr := s.EncodeSubmitSm(oP)
-	if rErr != nil {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error encoding packet body")
+	// Try to encode packet with specified parameters
+	if _, err = s.EncodeSubmitSm(oP); err != nil {
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error encoding packet body: ", err)
 		return
 	}
 
@@ -342,7 +348,7 @@ func main() {
 
 				// Start packet submission
 				log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "SendPacket", "count": config.SendCount, "rate": config.SendRate}).Info("Start message bulk message submission")
-				go PacketSender(s, rP, oP, tlvDynamic, config, &TimeTracker, SendCompleteCH)
+				go PacketSender(s, oP, tlvDynamic, config, &TimeTracker, SendCompleteCH)
 			}
 
 		case x := <-s.Inbox:
@@ -389,7 +395,7 @@ func main() {
 }
 
 // Send messages
-func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, ps libsmpp.SMPPSubmit, tlvDynamic []TLVDynamic, config Config, TimeTracker *TrackProcessingTime, SendCompleteCH chan interface{}) {
+func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TLVDynamic, config Config, TimeTracker *TrackProcessingTime, SendCompleteCH chan interface{}) {
 	// Sleep for 3s after finishing sending and close trigger channel
 	defer func(config Config) {
 		if config.StayConnected {
@@ -405,6 +411,13 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, ps libsmpp.SMPPS
 	var tickInfoModule uint
 	var blockSize uint
 	var msgLastSec uint
+
+	// Encode packet for static generation
+	p, rErr := s.EncodeSubmitSm(ps)
+	if rErr != nil {
+		log.WithFields(log.Fields{"type": "smpp-client", "service": "packetSender"}).Fatal("Error encoding static packet")
+		return
+	}
 
 	// For rate > 1000 SMS/sec send send messages each 2 ms
 	if config.SendRate > 1000 {
@@ -509,7 +522,7 @@ func PacketSender(s *libsmpp.SMPPSession, p libsmpp.SMPPPacket, ps libsmpp.SMPPS
 						var rErr error
 						p, rErr = s.EncodeSubmitSm(pN)
 						if rErr != nil {
-							log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error encoding packet body in message loop")
+							log.WithFields(log.Fields{"type": "smpp-client", "service": "packetSender"}).Fatal("Error encoding packet body in message loop")
 							return
 						}
 

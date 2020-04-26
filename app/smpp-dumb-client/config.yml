@@ -58,7 +58,7 @@ count: 100000000
 #count: 1
 
 # Submission rate
-rate: 1
+rate: 100
 
 # Submission TX window
 window: 2000

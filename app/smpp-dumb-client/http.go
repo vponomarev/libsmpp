@@ -12,13 +12,14 @@ import (
 type HttpHandler struct {
 	s      *libsmpp.SMPPSession
 	config *Config
+	sl     *StatsLog
 }
 
 func (h *HttpHandler) StatsGetInfo(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 
 	w.Header().Add("Content-type", "application/json")
-	fmt.Fprintln(w, reportStats())
+	fmt.Fprintln(w, h.sl.reportStats())
 }
 
 func (h *HttpHandler) StatPage(w http.ResponseWriter, r *http.Request) {

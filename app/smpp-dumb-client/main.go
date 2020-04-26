@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -285,7 +286,7 @@ func main() {
 		}
 		log.WithFields(log.Fields{"type": "smpp-client", "action": "profiler"}).Info("Starting profiler at: ", config.ProfilerListen)
 
-		hh := &HttpHandler{s: s, config: &config}
+		hh := &HttpHandler{s: s, config: &config, sl: &statsLog}
 		http.HandleFunc("/getInfo", hh.StatsGetInfo)
 		http.HandleFunc("/stat", hh.StatPage)
 
@@ -321,6 +322,10 @@ func main() {
 		log.WithFields(log.Fields{"type": "smpp-client", "service": "outConnect", "remoteIP": dest}).Fatal("Cannot connect to")
 		return
 	}
+
+	// Init statistics generator
+	ctx := context.Background()
+	statsLog.Init(ctx)
 
 	go s.RunOutgoing(conn, libsmpp.SMPPBind{
 		ConnMode:   cm,
@@ -358,11 +363,14 @@ func main() {
 			if x.Hdr.ID == libsmppConst.CMD_DELIVER_SM {
 				// Calculate number of received messages per second
 				if time.Now().Unix() > lastRXReportUnix {
-					postUpdateStats(StatsEntry{
-						T:         lastRXReportTime,
-						RecvRate:  lastRXCount,
-						RecvCount: totalRXCount,
-					})
+					/*
+						postUpdateStats(StatsEntry{
+							T:         lastRXReportTime,
+							RecvRate:  lastRXCount,
+							RecvCount: totalRXCount,
+						})
+					*/
+					statsLog.Update(time.Now(), StatCounter{{ID: "RecvRate", Value: uint32(lastRXCount)}, {ID: "RecvCount", Value: uint32(totalRXCount)}})
 					lastRXReportTime = time.Now()
 					lastRXReportUnix = lastRXReportTime.Unix()
 					lastRXCount = 0
@@ -566,14 +574,17 @@ func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TL
 				}
 				lastInfoReport = time.Now()
 				fmt.Println("[", s.SessionID, "] During last", reportDiff, "ms:", int64(msgLastSec)*1000/reportDiff, "[MAX:", done, "][TX:", txQ, "][RX:", rxQ, "][RTDavg micros: ", tAvg, ",", tCnt, "]")
-				se := StatsEntry{
-					T:         lastInfoReport,
-					SentRate:  uint(int64(msgLastSec) * 1000 / reportDiff),
-					SentCount: done,
-					SentRTD:   uint(tAvg / 1000), // Convert from Microseconds to Milliseconds
-				}
+				/*
+					se := StatsEntry{
+						T:         lastInfoReport,
+						SentRate:  uint(int64(msgLastSec) * 1000 / reportDiff),
+						SentCount: done,
+						SentRTD:   uint(tAvg / 1000), // Convert from Microseconds to Milliseconds
+					}
+					postUpdateStats(se)
+				*/
+				statsLog.Update(lastInfoReport, StatCounter{{ID: "SentRate", Value: uint32(int64(msgLastSec) * 1000 / reportDiff)}, {ID: "SentCount", Value: uint32(done)}, {ID: "SentRTD", Value: uint32(tAvg / 1000)}})
 
-				postUpdateStats(se)
 				msgLastSec = 0
 			}
 

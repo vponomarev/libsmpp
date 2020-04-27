@@ -67,6 +67,7 @@ type Params struct {
 	remoteIP   net.IP
 	remotePort int
 	bindMode   libsmpp.ConnSMPPMode
+	submit     libsmpp.SMPPSubmit
 }
 
 type TrackProcessingTime struct {
@@ -85,9 +86,9 @@ type TLVDynamic struct {
 // List of TLV preservation for Delivery Reports
 var tlvDynamic []TLVDynamic
 
-func loadConfig(configFileName string) (config Config, p Params, err error) {
+func loadConfig(configFileName string) (config Config, params Params, err error) {
 	config = Config{}
-	params := Params{}
+	params = Params{}
 
 	source, err := ioutil.ReadFile(configFileName)
 	if err != nil {
@@ -152,6 +153,20 @@ func loadConfig(configFileName string) (config Config, p Params, err error) {
 	default:
 		err = fmt.Errorf("invalid connection mode: %s (supported only: TX, RX, TRX)", config.Bind.Mode)
 	}
+
+	// Prepare SUBMIT_SM packet if specified
+	if params.submit, err = prepareSubmit(config); err != nil {
+		err = fmt.Errorf("error loading submit parameters: %v", err)
+		return
+	}
+
+	// Try to encode packet with specified parameters
+	s := &libsmpp.SMPPSession{}
+	if _, err = s.EncodeSubmitSm(params.submit); err != nil {
+		err = fmt.Errorf("error encoding packet body: %v", err)
+		return
+	}
+
 	return
 }
 
@@ -271,19 +286,6 @@ func main() {
 		}(config.ProfilerListen)
 	}
 
-	// Prepare SUBMIT_SM packet if specified
-	var oP libsmpp.SMPPSubmit
-	if oP, err = prepareSubmit(config); err != nil {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error loading submit parameters: ", err)
-		return
-	}
-
-	// Try to encode packet with specified parameters
-	if _, err = s.EncodeSubmitSm(oP); err != nil {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error encoding packet body: ", err)
-		return
-	}
-
 	// Track message processing time
 	TimeTracker := TrackProcessingTime{}
 
@@ -325,7 +327,7 @@ func main() {
 
 				// Start packet submission
 				log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "SendPacket", "count": config.SendCount, "rate": config.SendRate}).Info("Start message bulk message submission")
-				go PacketSender(s, oP, tlvDynamic, config, &TimeTracker, SendCompleteCH)
+				go PacketSender(s, params.submit, tlvDynamic, config, &TimeTracker, SendCompleteCH)
 			}
 
 		case x := <-s.Inbox:
@@ -335,13 +337,6 @@ func main() {
 			if x.Hdr.ID == libsmppConst.CMD_DELIVER_SM {
 				// Calculate number of received messages per second
 				if time.Now().Unix() > lastRXReportUnix {
-					/*
-						postUpdateStats(StatsEntry{
-							T:         lastRXReportTime,
-							RecvRate:  lastRXCount,
-							RecvCount: totalRXCount,
-						})
-					*/
 					statsLog.Update(time.Now(), StatCounter{{ID: "RecvRate", Value: uint32(lastRXCount)}, {ID: "RecvCount", Value: uint32(totalRXCount)}})
 					lastRXReportTime = time.Now()
 					lastRXReportUnix = lastRXReportTime.Unix()

@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"flag"
 	"fmt"
+	"github.com/kelseyhightower/envconfig"
 	log "github.com/sirupsen/logrus"
 	"github.com/vponomarev/libsmpp"
 	libsmppConst "github.com/vponomarev/libsmpp/const"
@@ -54,19 +56,17 @@ type Config struct {
 		TLV                []string `yaml:"tlv"`
 	}
 
-	SendCount  uint `yaml:"count"`
-	SendRate   uint `yaml:"rate"`
-	SendWindow uint `yaml:"window"`
+	SendCount  uint `yaml:"count" envconfig:"SEND_COUNT"`
+	SendRate   uint `yaml:"rate" envconfig:"SEND_RATE"`
+	SendWindow uint `yaml:"window" envconfig:"SEND_WINDOW"`
 
 	StayConnected bool `yaml:"stayConnected,omitempty"`
 }
 
 type Params struct {
-	LogLevel       log.Level
-	ConfigFileName string
-	Flags          struct {
-		LogLevel bool
-	}
+	remoteIP   net.IP
+	remotePort int
+	bindMode   libsmpp.ConnSMPPMode
 }
 
 type TrackProcessingTime struct {
@@ -85,41 +85,74 @@ type TLVDynamic struct {
 // List of TLV preservation for Delivery Reports
 var tlvDynamic []TLVDynamic
 
-func ProcessCMDLine() (p Params) {
-	// Set default
-	p.LogLevel = log.InfoLevel
-	p.ConfigFileName = "config.yml"
+func loadConfig(configFileName string) (config Config, p Params, err error) {
+	config = Config{}
+	params := Params{}
 
-	var pv bool
-	var pvn string
-	for _, param := range os.Args[1:] {
-		if pv {
-			switch pvn {
-			// LogLevel
-			case "-log":
-				l, err := log.ParseLevel(param)
-				if err != nil {
-					l = log.InfoLevel
-					fmt.Print("Incorrect LogLevel [", param, "], set LogLevel to: ", l.String())
-				} else {
-					p.LogLevel = l
-					p.Flags.LogLevel = true
-				}
-			case "-config":
-				p.ConfigFileName = param
-			}
-		} else {
-			switch param {
-			case "-log":
-				pvn = param
-				pv = true
-			case "-config":
-				pvn = param
-				pv = true
-			}
+	source, err := ioutil.ReadFile(configFileName)
+	if err != nil {
+		err = fmt.Errorf("cannot read config file [%s]", configFileName)
+		return
+	}
+
+	if err = yaml.Unmarshal(source, &config); err != nil {
+		err = fmt.Errorf("error parsing config file [%s]: %v", configFileName, err)
+		return
+	}
+	log.WithFields(log.Fields{"type": "smpp-client"}).Info("Loaded configuration file: ", configFileName)
+
+	// Load ENV configuration
+	if err = envconfig.Process("", &config); err != nil {
+		err = fmt.Errorf("error parsing ENVIRONMENT configuration: %v", err)
+		return
+	}
+
+	// Load LogLevel from config if present
+	if len(config.Log.Level) > 0 {
+		if l, err := log.ParseLevel(config.Log.Level); err == nil {
+			log.SetLevel(l)
+			log.WithFields(log.Fields{"type": "smpp-client"}).Warning("Switch LogLevel to: ", l.String())
 		}
 	}
-	return p
+
+	// Split REMOTE HOST:PORT
+	remote := strings.Split(config.Remote, ":")
+	if len(remote) != 2 {
+		err = fmt.Errorf("cannot parse remote ip:port (%s)", config.Remote)
+		return
+	}
+
+	params.remoteIP = net.ParseIP(remote[0])
+	if params.remoteIP == nil {
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Invalid destination IP:", remote[0])
+		return
+	}
+
+	remotePort, err := strconv.ParseUint(remote[1], 10, 16)
+	if err != nil {
+		err = fmt.Errorf("invalid destination Port: %s")
+		return
+	}
+	params.remotePort = int(remotePort)
+
+	// Check if Bind parameters are set (systemID at least)
+	if len(config.Bind.SystemID) < 1 {
+		err = fmt.Errorf("bind/systemID is not specified")
+		return
+	}
+
+	// Check bind mode (TRX/TX/RX)
+	switch config.Bind.Mode {
+	case "TX":
+		params.bindMode = libsmpp.CSMPPTX
+	case "RX":
+		params.bindMode = libsmpp.CSMPPRX
+	case "TRX":
+		params.bindMode = libsmpp.CSMPPTRX
+	default:
+		err = fmt.Errorf("invalid connection mode: %s (supported only: TX, RX, TRX)", config.Bind.Mode)
+	}
+	return
 }
 
 // Prepare SMPPSubmit structure for stress message generation
@@ -198,77 +231,16 @@ func prepareSubmit(config Config) (oP libsmpp.SMPPSubmit, err error) {
 }
 
 func main() {
-	pParam := ProcessCMDLine()
-
-	fmt.Println("LogLevel:", pParam.LogLevel.String())
-	fmt.Println("Config file:", pParam.ConfigFileName)
+	// Load config file name
+	configFileName := flag.String("-config", "config.yml", "Override configuration file name")
 
 	log.SetOutput(os.Stdout)
-	log.SetLevel(log.DebugLevel)
-
-	log.WithFields(log.Fields{"type": "smpp-client"}).Info("Start")
+	log.SetLevel(log.InfoLevel)
 
 	// Load configuration file
-	config := Config{}
-
-	source, err := ioutil.ReadFile(pParam.ConfigFileName)
+	config, params, err := loadConfig(*configFileName)
 	if err != nil {
-		fmt.Println("Cannot read config file [", pParam.ConfigFileName, "]")
-		return
-	}
-
-	if err = yaml.Unmarshal(source, &config); err != nil {
-		fmt.Println("Error parsing config file [", pParam.ConfigFileName, "]:", err)
-		return
-	}
-	log.WithFields(log.Fields{"type": "smpp-client"}).Info("Loaded configuration file: ", pParam.ConfigFileName)
-
-	// Load LogLevel from config if present
-	if (len(config.Log.Level) > 0) && (!pParam.Flags.LogLevel) {
-		if l, err := log.ParseLevel(config.Log.Level); err == nil {
-			pParam.LogLevel = l
-
-			log.SetLevel(pParam.LogLevel)
-			log.WithFields(log.Fields{"type": "smpp-client"}).Warning("Override LogLevel to: ", pParam.LogLevel.String())
-		}
-	}
-
-	// Split REMOTE HOST:PORT
-	remote := strings.Split(config.Remote, ":")
-	if len(remote) != 2 {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Cannot parse remote ip:port (", config.Remote, ")")
-		return
-	}
-
-	remoteIP := net.ParseIP(remote[0])
-	if remoteIP == nil {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Invalid destination IP:", remote[0])
-		return
-	}
-
-	remotePort, err := strconv.ParseUint(remote[1], 10, 16)
-	if err != nil {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Invalid destination Port:", remote[1])
-		return
-	}
-
-	// Check if Bind parameters are set (systemID at least)
-	if len(config.Bind.SystemID) < 1 {
-		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("bind/systemID is not specified")
-		return
-	}
-
-	// Check bind mode (TRX/TX/RX)
-	var cm libsmpp.ConnSMPPMode
-	switch config.Bind.Mode {
-	case "TX":
-		cm = libsmpp.CSMPPTX
-	case "RX":
-		cm = libsmpp.CSMPPRX
-	case "TRX":
-		cm = libsmpp.CSMPPTRX
-	default:
-		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Invalid connection mode:", config.Bind.Mode, " (supported only: TX, RX, TRX)")
+		log.WithFields(log.Fields{"type": "smpp-client"}).Fatal("Error loading config file: ", err)
 		return
 	}
 
@@ -315,7 +287,7 @@ func main() {
 	// Track message processing time
 	TimeTracker := TrackProcessingTime{}
 
-	dest := &net.TCPAddr{IP: remoteIP, Port: int(remotePort)}
+	dest := &net.TCPAddr{IP: params.remoteIP, Port: params.remotePort}
 	log.WithFields(log.Fields{"type": "smpp-client", "remoteIP": dest}).Info("Connecting to")
 	conn, err := net.DialTCP("tcp", nil, dest)
 	if err != nil {
@@ -328,7 +300,7 @@ func main() {
 	statsLog.Init(ctx)
 
 	go s.RunOutgoing(conn, libsmpp.SMPPBind{
-		ConnMode:   cm,
+		ConnMode:   params.bindMode,
 		SystemID:   config.Bind.SystemID,
 		Password:   config.Bind.Password,
 		SystemType: config.Bind.SystemType,

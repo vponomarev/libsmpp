@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/vponomarev/libsmpp"
@@ -66,104 +65,6 @@ func doStop() bool {
 		close(stopCh)
 	}
 	return false
-}
-
-type HttpHandler struct {
-	p      *libsmpp.SessionPool
-	config *Config
-}
-
-// [ /session/list ]
-func (h *HttpHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	sl := h.p.GetSessionList()
-	/*
-		for k, v := range sl {
-			fmt.Fprintln(w, k, ":", v, v.Cs.Error(), v.Cs.NError(), v.Cs.GetDirection())
-		}
-	*/
-
-	jv, err := json.Marshal(sl)
-	if err != nil {
-		fmt.Fprintln(w, ": Error generating JSON")
-		return
-	}
-	w.Header().Add("Content-type", "application/json")
-	fmt.Fprintln(w, string(jv))
-}
-
-// [ /session/stat ]
-func (h *HttpHandler) SessionStats(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-
-}
-
-// [ /log/level ]
-func (h *HttpHandler) HttpLogLevel(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	level := r.FormValue("level")
-	if len(level) > 0 {
-		if l, err := log.ParseLevel(level); err == nil {
-			log.SetLevel(l)
-			log.WithFields(log.Fields{
-				"type": "smpp-lb",
-			}).Warning("Override LogLevel to: ", l.String())
-			fmt.Fprintf(w, "OK")
-		} else {
-			fmt.Fprintf(w, "ERROR:", err)
-		}
-	} else {
-		fmt.Fprintf(w, log.GetLevel().String())
-	}
-}
-
-// [ /log/rate ]
-func (h *HttpHandler) HttpLogRate(w http.ResponseWriter, r *http.Request) {
-	rate := r.FormValue("rate")
-	if len(rate) > 0 {
-		if l, err := strconv.ParseBool(rate); err == nil {
-			h.config.Log.Rate = l
-			log.WithFields(log.Fields{
-				"type": "smpp-lb",
-			}).Warning("Override LoggingRate to: ", l)
-			fmt.Fprintf(w, "OK")
-		} else {
-			fmt.Fprintf(w, "ERROR:", err)
-		}
-	} else {
-		fmt.Fprintln(w, h.config.Log.Rate)
-	}
-}
-
-func ProcessCMDLine() (p Params) {
-	// Set default
-	p.LogLevel = log.InfoLevel
-
-	var pv bool
-	var pvn string
-	for _, param := range os.Args[1:] {
-		if pv {
-			switch pvn {
-			// LogLevel
-			case "-log":
-				l, err := log.ParseLevel(param)
-				if err != nil {
-					l = log.InfoLevel
-					fmt.Print("Incorrect LogLevel [", param, "], set LogLevel to: ", l.String())
-				} else {
-					p.LogLevel = l
-					p.Flags.LogLevel = true
-				}
-			}
-		} else {
-			switch param {
-			case "-log":
-				pvn = param
-				pv = true
-			}
-		}
-	}
-	return p
 }
 
 func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config *Config) {

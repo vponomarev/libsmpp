@@ -13,7 +13,6 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net"
-	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"strconv"
@@ -266,25 +265,8 @@ func main() {
 	}
 	s.Init()
 
-	// Init profiler if enabled
-	if config.Profiler {
-		if len(config.ProfilerListen) == 0 {
-			config.ProfilerListen = "127.0.0.1:5800"
-		}
-		log.WithFields(log.Fields{"type": "smpp-client", "action": "profiler"}).Info("Starting profiler at: ", config.ProfilerListen)
-
-		hh := &HttpHandler{s: s, config: &config, sl: &statsLog}
-		http.HandleFunc("/getInfo", hh.StatsGetInfo)
-		http.HandleFunc("/stat", hh.StatPage)
-
-		go func(addr string) {
-			err := http.ListenAndServe(addr, nil)
-			if err != nil {
-				log.WithFields(log.Fields{"type": "smpp-client", "action": "profiler"}).Fatal("ListenAndServe returned an error: ", err)
-				return
-			}
-		}(config.ProfilerListen)
-	}
+	// Init profiler
+	runProfiler(s, config)
 
 	// Track message processing time
 	TimeTracker := TrackProcessingTime{}
@@ -541,15 +523,6 @@ func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TL
 				}
 				lastInfoReport = time.Now()
 				fmt.Println("[", s.SessionID, "] During last", reportDiff, "ms:", int64(msgLastSec)*1000/reportDiff, "[MAX:", done, "][TX:", txQ, "][RX:", rxQ, "][RTDavg micros: ", tAvg, ",", tCnt, "]")
-				/*
-					se := StatsEntry{
-						T:         lastInfoReport,
-						SentRate:  uint(int64(msgLastSec) * 1000 / reportDiff),
-						SentCount: done,
-						SentRTD:   uint(tAvg / 1000), // Convert from Microseconds to Milliseconds
-					}
-					postUpdateStats(se)
-				*/
 				statsLog.Update(lastInfoReport, StatCounter{{ID: "SentRate", Value: uint32(int64(msgLastSec) * 1000 / reportDiff)}, {ID: "SentCount", Value: uint32(done)}, {ID: "SentRTD", Value: uint32(tAvg / 1000)}})
 
 				msgLastSec = 0

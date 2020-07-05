@@ -2,6 +2,7 @@
 # SMPP Dumb Client configuration file
 #
 
+#
 # Logging configuration
 log:
   # Log level: trace / debug / info / warning / error / fatal / panic
@@ -20,16 +21,19 @@ profiler: yes
 # Profiler listening IP:port [ default is: 127.0.0.1:5800 ]
 profilerListen: 127.0.0.1:5800
 
-# Remote IP:port
-remote: 127.0.0.1:2500
+#
+# SMPP Configuration
+smpp:
+  # Remote IP:port
+  remote: 127.0.0.1:2500
 
-# Bind parameters
-bind:
-  systemID: test
-  systemType: test
-  password: test
-  # Connection mode: TRX/TX/RX (default: TRX)
-  mode: TRX
+  # Bind parameters
+  bind:
+    systemID: test
+    systemType: test
+    password: test
+    # Connection mode: TRX/TX/RX (default: TRX)
+    mode: TRX
 
 # Message submission parameters
 message:

@@ -28,16 +28,19 @@ type Config struct {
 		Netbuf bool `yaml:"netbuf"`
 	}
 
-	Remote         string `yaml:"remote,omitempty"`
+	SMPP struct {
+		Remote string `yaml:"remote,omitempty"`
+		Bind   struct {
+			SystemID   string `yaml:"systemID,omitempty"`
+			SystemType string `yaml:"systemType,omitempty"`
+			Password   string `yaml:"password,omitempty"`
+			Mode       string `yaml:"mode",omitempty`
+		}
+	}
+
 	Profiler       bool   `yaml:"profiler,omitempty"`
 	ProfilerListen string `yaml:"profilerListen,omitempty"`
-	Bind           struct {
-		SystemID   string `yaml:"systemID,omitempty"`
-		SystemType string `yaml:"systemType,omitempty"`
-		Password   string `yaml:"password,omitempty"`
-		Mode       string `yaml:"mode",omitempty`
-	}
-	Message struct {
+	Message        struct {
 		From struct {
 			TON  int    `yaml:"ton"`
 			NPI  int    `yaml:"npi"`
@@ -116,9 +119,9 @@ func loadConfig(configFileName string) (config Config, params Params, err error)
 	}
 
 	// Split REMOTE HOST:PORT
-	remote := strings.Split(config.Remote, ":")
+	remote := strings.Split(config.SMPP.Remote, ":")
 	if len(remote) != 2 {
-		err = fmt.Errorf("cannot parse remote ip:port (%s)", config.Remote)
+		err = fmt.Errorf("cannot parse remote ip:port (%s)", config.SMPP.Remote)
 		return
 	}
 
@@ -136,13 +139,13 @@ func loadConfig(configFileName string) (config Config, params Params, err error)
 	params.remotePort = int(remotePort)
 
 	// Check if Bind parameters are set (systemID at least)
-	if len(config.Bind.SystemID) < 1 {
+	if len(config.SMPP.Bind.SystemID) < 1 {
 		err = fmt.Errorf("bind/systemID is not specified")
 		return
 	}
 
 	// Check bind mode (TRX/TX/RX)
-	switch config.Bind.Mode {
+	switch config.SMPP.Bind.Mode {
 	case "TX":
 		params.bindMode = libsmpp.CSMPPTX
 	case "RX":
@@ -150,7 +153,7 @@ func loadConfig(configFileName string) (config Config, params Params, err error)
 	case "TRX":
 		params.bindMode = libsmpp.CSMPPTRX
 	default:
-		err = fmt.Errorf("invalid connection mode: %s (supported only: TX, RX, TRX)", config.Bind.Mode)
+		err = fmt.Errorf("invalid connection mode: %s (supported only: TX, RX, TRX)", config.SMPP.Bind.Mode)
 	}
 
 	// Prepare SUBMIT_SM packet if specified
@@ -285,9 +288,9 @@ func main() {
 
 	go s.RunOutgoing(conn, libsmpp.SMPPBind{
 		ConnMode:   params.bindMode,
-		SystemID:   config.Bind.SystemID,
-		Password:   config.Bind.Password,
-		SystemType: config.Bind.SystemType,
+		SystemID:   config.SMPP.Bind.SystemID,
+		Password:   config.SMPP.Bind.Password,
+		SystemType: config.SMPP.Bind.SystemType,
 		IVersion:   0x34,
 	},
 		1)

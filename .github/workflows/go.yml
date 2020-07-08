@@ -1,4 +1,4 @@
-name: Build_x86-64
+name: Build_Linux_x86-64
 
 on:
   push:
@@ -24,7 +24,6 @@ jobs:
 
     - name: Get dependencies
       run: |
-        ls -l
         cd app/smpp-dumb-client
         go get -v -t -d ./...
         cd ../smpp-dumb-server
@@ -35,6 +34,7 @@ jobs:
                 
     - name: Build
       run: | 
+        go test
         cd app/smpp-dumb-client
         go build -v .
         cd ../smpp-dumb-server
@@ -61,7 +61,7 @@ jobs:
         cp app/smpp-lb/smpp-lb out/smpp-lb/
         cp app/smpp-lb/config.yml out/smpp-lb/
         find out/
-    - name: Upload binary
+    - name: Upload linux binary
       uses: actions/upload-artifact@master
       with:
         name: linux_x86-64

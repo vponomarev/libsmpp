@@ -1,0 +1,14 @@
+syntax = "proto3";
+package smpp;
+
+service SubmitSM {
+    rpc Do(SubmitRequest) returns (SubmitResponse) {}
+}
+
+message SubmitRequest {
+    string  message = 1;
+}
+
+message SubmitResponse {
+    string message = 1;
+}

@@ -133,7 +133,7 @@ func loadConfig(configFileName string) (config Config, params Params, err error)
 
 	remotePort, err := strconv.ParseUint(remote[1], 10, 16)
 	if err != nil {
-		err = fmt.Errorf("invalid destination Port: %s")
+		err = fmt.Errorf("invalid destination Port: %s", remote[1])
 		return
 	}
 	params.remotePort = int(remotePort)

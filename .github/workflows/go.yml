@@ -50,3 +50,4 @@ jobs:
         cd ../smpp-lb
         go test -v .
         cd ../..
+        

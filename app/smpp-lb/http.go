@@ -51,7 +51,7 @@ func (h *HttpHandler) HttpLogLevel(w http.ResponseWriter, r *http.Request) {
 			}).Warning("Override LogLevel to: ", l.String())
 			fmt.Fprintf(w, "OK")
 		} else {
-			fmt.Fprintf(w, "ERROR:", err)
+			fmt.Fprintf(w, "ERROR: %v", err)
 		}
 	} else {
 		fmt.Fprintf(w, log.GetLevel().String())
@@ -69,7 +69,7 @@ func (h *HttpHandler) HttpLogRate(w http.ResponseWriter, r *http.Request) {
 			}).Warning("Override LoggingRate to: ", l)
 			fmt.Fprintf(w, "OK")
 		} else {
-			fmt.Fprintf(w, "ERROR:", err)
+			fmt.Fprintf(w, "ERROR: %v", err)
 		}
 	} else {
 		fmt.Fprintln(w, h.config.Log.Rate)

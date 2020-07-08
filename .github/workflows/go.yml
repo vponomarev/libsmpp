@@ -24,6 +24,7 @@ jobs:
 
     - name: Get dependencies
       run: |
+        ls -l
         cd cmd/smpp-dump-client
         go get -v -t -d ./...
         cd ../smpp-dumb-server

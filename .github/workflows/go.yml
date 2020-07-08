@@ -1,4 +1,4 @@
-name: Go
+name: Build_x86-64
 
 on:
   push:
@@ -64,6 +64,6 @@ jobs:
     - name: Upload binary
       uses: actions/upload-artifact@master
       with:
-        name: linux
+        name: linux_x86-64
         path: out        
               

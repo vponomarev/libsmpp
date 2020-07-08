@@ -34,7 +34,6 @@ jobs:
                 
     - name: Build
       run: | 
-        go test
         cd app/smpp-dumb-client
         go build -v .
         cd ../smpp-dumb-server
@@ -44,6 +43,7 @@ jobs:
         cd ../..
     - name: Test
       run: |
+        go test
         cd app/smpp-dumb-server
         go test -v .
         cd ../smpp-dumb-client

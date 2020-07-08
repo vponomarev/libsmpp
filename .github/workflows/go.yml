@@ -51,4 +51,19 @@ jobs:
         cd ../smpp-lb
         go test -v .
         cd ../..
-        
+    - name: Prepare artefacts
+      run: |
+        mkdir -p out/smpp-dumb-client out/smpp-dumb-server out/smpp-lb
+        cp app/smpp-dumb-server/smpp-dumb-server out/smpp-dumb-server/
+        cp app/smpp-dumb-server/config.yml out/smpp-dumb-server/
+        cp app/smpp-dumb-client/smpp-dumb-client out/smpp-dumb-client/
+        cp app/smpp-dumb-client/config.yml out/smpp-dumb-client/
+        cp app/smpp-lb/smpp-lb out/smpp-lb/
+        cp app/smpp-lb/config.yml out/smpp-lb/
+        find out/
+    - name: Upload binary
+      uses: actions/upload-artifact@master
+      with:
+        name: linux
+        path: out        
+              

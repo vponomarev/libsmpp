@@ -39,7 +39,7 @@ type Config struct {
 	Accounts map[string]ConfigAccount
 
 	Responder struct {
-		MsgID string `yaml:"msgid",omitempty`
+		MsgID string `yaml:"msgid,omitempty"`
 		Delay struct {
 			Min int `yaml:"min,omitempty"`
 			Max int `yaml:"max,omitempty"`

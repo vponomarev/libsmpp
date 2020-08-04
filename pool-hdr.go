@@ -36,14 +36,14 @@ type SessionPool struct {
 	maxSessionID PQSessionID
 	sessionMutex sync.RWMutex
 
-	maxTransaction   uint32
-	transactionMutex sync.RWMutex
+	maxTransaction uint32
+	//	transactionMutex sync.RWMutex
 
 	Track      map[uint32]PoolPacketTracking
 	trackMutex sync.RWMutex
 
 	RoutePolicy []PRoutePolicy
-	routeMutex  sync.RWMutex
+	//	routeMutex  sync.RWMutex
 }
 
 // Pool Queue Packet

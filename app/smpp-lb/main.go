@@ -133,6 +133,7 @@ func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config *Conf
 
 }
 
+/*
 func convert(i interface{}) interface{} {
 	switch x := i.(type) {
 	case map[interface{}]interface{}:
@@ -148,6 +149,7 @@ func convert(i interface{}) interface{} {
 	}
 	return i
 }
+*/
 
 func main() {
 	pParam := ProcessCMDLine()

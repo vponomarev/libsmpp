@@ -52,12 +52,15 @@ func (h *HttpHandler) StatsRoot(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "Error parsing template file:", fn, " with error:", err)
 		return
 	}
-	t.Execute(w, map[string]string{
+	err = t.Execute(w, map[string]string{
 		"ServerHost": r.Host,
 		"Count":      fmt.Sprintf("%d", h.config.SendCount),
 		"Rate":       fmt.Sprintf("%d", h.config.SendRate),
 		"Window":     fmt.Sprintf("%d", h.config.SendWindow),
 	})
+	if err != nil {
+		fmt.Fprint(w, "Internal server error: cannot process template")
+	}
 }
 
 func (h *HttpHandler) StatsGetInfo(w http.ResponseWriter, r *http.Request) {

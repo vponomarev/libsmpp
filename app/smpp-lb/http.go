@@ -64,7 +64,7 @@ func (h *HttpHandler) HttpLogLevel(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "ERROR: %v", err)
 		}
 	} else {
-		fmt.Fprintf(w, log.GetLevel().String())
+		fmt.Fprint(w, log.GetLevel().String())
 	}
 }
 

@@ -154,6 +154,7 @@ func loadConfig(configFileName string) (config Config, params Params, err error)
 		params.bindMode = libsmpp.CSMPPTRX
 	default:
 		err = fmt.Errorf("invalid connection mode: %s (supported only: TX, RX, TRX)", config.SMPP.Bind.Mode)
+		return
 	}
 
 	// Prepare SUBMIT_SM packet if specified

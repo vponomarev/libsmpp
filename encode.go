@@ -204,6 +204,9 @@ func (s *SMPPSession) DecodeBind(p *SMPPPacket) error {
 
 	s.Bind.AddrRange, l, erx = ReadCString(p.Body[offset:], 13, "AddressRange")
 	offset += l
+	if erx != nil {
+		return erx
+	}
 
 	if offset != int(p.BodyLen) {
 		return fmt.Errorf("Invalid packet body len [HDR: %d, Context: %d]", p.BodyLen, offset)

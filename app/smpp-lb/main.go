@@ -57,6 +57,7 @@ type Params struct {
 	}
 }
 
+/*
 func doStop() bool {
 	select {
 	case <-stopCh:
@@ -66,6 +67,7 @@ func doStop() bool {
 	}
 	return false
 }
+*/
 
 func hConn(id uint32, conn *net.TCPConn, pool *libsmpp.SessionPool, config *Config) {
 

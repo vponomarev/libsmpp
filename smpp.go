@@ -234,7 +234,6 @@ func (s *SMPPSession) enquireSender(t int) {
 			return
 		}
 	}
-	return
 }
 
 func (s *SMPPSession) enquireResponder(p *SMPPPacket) {

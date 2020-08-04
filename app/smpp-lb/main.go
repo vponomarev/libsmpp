@@ -320,5 +320,4 @@ forLoop:
 	<-s.Closed
 
 	log.WithFields(log.Fields{"type": "smpp-lb", "service": "outConnect", "remote": dest}).Info("Session is closed")
-	return
 }

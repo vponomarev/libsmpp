@@ -34,7 +34,7 @@ type Config struct {
 			SystemID   string `yaml:"systemID,omitempty"`
 			SystemType string `yaml:"systemType,omitempty"`
 			Password   string `yaml:"password,omitempty"`
-			Mode       string `yaml:"mode",omitempty`
+			Mode       string `yaml:"mode,omitempty"`
 		}
 	}
 

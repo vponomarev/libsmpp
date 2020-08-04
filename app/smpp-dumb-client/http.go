@@ -41,7 +41,10 @@ func runProfiler(s *libsmpp.SMPPSession, config Config) {
 }
 
 func (h *HttpHandler) StatsRoot(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
+	if r.ParseForm() != nil {
+		fmt.Fprintln(w, "Error parsing request")
+		return
+	}
 
 	fn := "html/index.html"
 	t, err := template.ParseFiles(fn)
@@ -58,14 +61,20 @@ func (h *HttpHandler) StatsRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HttpHandler) StatsGetInfo(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
+	if r.ParseForm() != nil {
+		fmt.Fprintln(w, "Error parsing request")
+		return
+	}
 
 	w.Header().Add("Content-type", "application/json")
 	fmt.Fprintln(w, h.sl.reportStats())
 }
 
 func (h *HttpHandler) StatPage(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
+	if r.ParseForm() != nil {
+		fmt.Fprintln(w, "Error parsing request")
+		return
+	}
 
 	file, err := os.Open("html/stat.html")
 	if err != nil {

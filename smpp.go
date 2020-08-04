@@ -214,7 +214,7 @@ func (s *SMPPSession) allocateSeqNo() uint32 {
 	return x
 }
 
-func (s *SMPPSession) enquireSender(t int) error {
+func (s *SMPPSession) enquireSender(t int) {
 	log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "EnquireSender", "tick": t}).Info("Starting ENQUIRE SENDER")
 	tk := time.NewTicker(time.Duration(t) * time.Second)
 	for {
@@ -231,10 +231,10 @@ func (s *SMPPSession) enquireSender(t int) error {
 
 			s.OutboxRAW <- s.EncodeEnquireLinkRAW(seq)
 		case <-s.Closed:
-			return nil
+			return
 		}
 	}
-	return nil
+	return
 }
 
 func (s *SMPPSession) enquireResponder(p *SMPPPacket) {

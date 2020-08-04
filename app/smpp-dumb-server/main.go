@@ -22,10 +22,10 @@ const (
 )
 
 type ConfigAccount struct {
-	mode       string
+	Mode       string `yaml:"mode"`
 	SystemID   string `yaml:"systemID"`
 	SystemType string `yaml:"systemType"`
-	Password   string
+	Password   string `yaml:"password"`
 }
 
 type Config struct {
@@ -315,7 +315,15 @@ func hConn(id uint32, conn *net.TCPConn, config *Config, lConfig *LConfig) {
 				if (v.SystemID == x.Bind.SystemID) && (v.SystemType == x.Bind.SystemType) {
 					// Validate password
 					if v.Password == x.Bind.Password {
-						// TODO: Validate bind type
+						// Validate bind type
+						if (strings.ToLower(v.Mode) == "tx") && (x.Bind.ConnMode != libsmpp.CSMPPTX) ||
+							(strings.ToLower(v.Mode) == "rx") && (x.Bind.ConnMode != libsmpp.CSMPPRX) {
+							errNo = libsmppConst.ESME_RBINDFAIL
+							log.WithFields(log.Fields{"type": "smpp-server", "service": "HandleConnection", "accountID": k}).Error("Invalid bind type for account: ", k)
+							lookupState = true
+							break
+						}
+
 						errNo = libsmppConst.ESME_ROK
 						s.SessionName = k
 						lookupState = true
@@ -356,8 +364,7 @@ func hConn(id uint32, conn *net.TCPConn, config *Config, lConfig *LConfig) {
 }
 
 func sessionProcessor(s *libsmpp.SMPPSession, config *Config, lConfig *LConfig) {
-	var msgID uint32
-	msgID = 1
+	var msgID uint32 = 1
 
 	log.WithFields(log.Fields{"type": "smpp-server", "service": "PacketLoop", "SID": s.SessionID, "action": "Start"}).Info("Start message processing")
 

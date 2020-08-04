@@ -16,8 +16,8 @@ import (
 	"time"
 )
 
-// FLAG: Stop handling traffic
-var stopCh chan struct{}
+// // FLAG: Stop handling traffic
+// var stopCh chan struct{}
 
 type ConfigInterface interface{}
 type ConfigSrvAccount struct {

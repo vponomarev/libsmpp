@@ -16,7 +16,10 @@ type HttpHandler struct {
 
 // [ /session/list ]
 func (h *HttpHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
+	if r.ParseForm() != nil {
+		fmt.Fprintln(w, "Error parsing request")
+		return
+	}
 	sl := h.p.GetSessionList()
 	/*
 		for k, v := range sl {
@@ -35,13 +38,20 @@ func (h *HttpHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 
 // [ /session/stat ]
 func (h *HttpHandler) SessionStats(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
+	if r.ParseForm() != nil {
+		fmt.Fprintln(w, "Error parsing request")
+		return
+	}
 
 }
 
 // [ /log/level ]
 func (h *HttpHandler) HttpLogLevel(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
+	if r.ParseForm() != nil {
+		fmt.Fprintln(w, "Error parsing request")
+		return
+	}
+
 	level := r.FormValue("level")
 	if len(level) > 0 {
 		if l, err := log.ParseLevel(level); err == nil {

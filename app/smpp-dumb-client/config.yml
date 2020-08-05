@@ -35,6 +35,9 @@ smpp:
     # Connection mode: TRX/TX/RX (default: TRX)
     mode: TRX
 
+#
+# Message generator configuration
+#generator:
 # Message submission parameters
 message:
   from:

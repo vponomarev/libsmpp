@@ -145,7 +145,7 @@ func (p *SessionPool) QManager() {
 		log.WithFields(log.Fields{"type": "pool", "service": "QManager", "action": "Stop"}).Fatal("Unexpected stop of QManager")
 	}()
 
-	for {
+	for { // nolint:gosimple
 		select {
 		case pp := <-p.Queue:
 			msgID++
@@ -224,7 +224,7 @@ func (p *SessionPool) QManager() {
 
 // Manage QueueResp packets
 func (p *SessionPool) QDeliveryManager() {
-	for {
+	for { // nolint:gosimple
 		select {
 		case pp := <-p.QResp:
 			log.WithFields(log.Fields{"type": "pool", "SID": pp.OrigSessionID, "service": "QDeliveryManager", "action": "ReadQResp", "DestSID": pp.DestSessionID, "UTID": pp.Packet.UplinkTransactionID}).Debug("Incoming packet: ", pp.Packet.Hdr.String())

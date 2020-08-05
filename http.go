@@ -7,7 +7,7 @@ func (s *SMPPSubmit) toJSON() (data []byte, err error) {
 	return
 }
 
-func (s *SMPPSubmit) fromJSON(data []byte) (err error) {
+func (s *SMPPSubmit) fromJSON(data []byte) (err error) { // nolint:unused
 	err = json.Unmarshal(data, s)
 	return
 }

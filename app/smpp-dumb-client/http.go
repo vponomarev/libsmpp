@@ -54,9 +54,9 @@ func (h *HttpHandler) StatsRoot(w http.ResponseWriter, r *http.Request) {
 	}
 	err = t.Execute(w, map[string]string{
 		"ServerHost": r.Host,
-		"Count":      fmt.Sprintf("%d", h.config.SendCount),
-		"Rate":       fmt.Sprintf("%d", h.config.SendRate),
-		"Window":     fmt.Sprintf("%d", h.config.SendWindow),
+		"Count":      fmt.Sprintf("%d", h.config.Generator.SendCount),
+		"Rate":       fmt.Sprintf("%d", h.config.Generator.SendRate),
+		"Window":     fmt.Sprintf("%d", h.config.Generator.SendWindow),
 	})
 	if err != nil {
 		fmt.Fprint(w, "Internal server error: cannot process template")

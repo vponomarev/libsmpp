@@ -114,20 +114,20 @@ func prepareSubmit(config Config) (oP libsmpp.SMPPSubmit, err error) {
 	oP = libsmpp.SMPPSubmit{
 		ServiceType: "",
 		Source: libsmpp.SMPPAddress{
-			TON:  uint8(config.Message.From.TON),
-			NPI:  uint8(config.Message.From.NPI),
-			Addr: config.Message.From.Addr,
+			TON:  uint8(config.Generator.Message.From.TON),
+			NPI:  uint8(config.Generator.Message.From.NPI),
+			Addr: config.Generator.Message.From.Addr,
 		},
 		Dest: libsmpp.SMPPAddress{
-			TON:  uint8(config.Message.To.TON),
-			NPI:  uint8(config.Message.To.NPI),
-			Addr: config.Message.To.Addr,
+			TON:  uint8(config.Generator.Message.To.TON),
+			NPI:  uint8(config.Generator.Message.To.NPI),
+			Addr: config.Generator.Message.To.Addr,
 		},
-		ShortMessages:      config.Message.Body,
-		RegisteredDelivery: uint8(config.Message.RegisteredDelivery),
+		ShortMessages:      config.Generator.Message.Body,
+		RegisteredDelivery: uint8(config.Generator.Message.RegisteredDelivery),
 		TLV:                map[libsmpp.TLVCode]libsmpp.TLVStruct{},
 	}
-	for _, tlv := range config.Message.TLV {
+	for _, tlv := range config.Generator.Message.TLV {
 		tEntity := strings.Split(tlv, ";")
 		if len(tEntity) != 3 {
 			err = fmt.Errorf("error parsing TLV [%s] - should be 3 params", tlv)
@@ -247,7 +247,7 @@ func main() {
 			if x.GetSMPPState() == libsmpp.CSMPPBound {
 
 				// Start packet submission
-				log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "SendPacket", "count": config.SendCount, "rate": config.SendRate}).Info("Start message bulk message submission")
+				log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "SendPacket", "count": config.Generator.SendCount, "rate": config.Generator.SendRate}).Info("Start message bulk message submission")
 				go PacketSender(s, params.submit, tlvDynamic, config, &TimeTracker, SendCompleteCH)
 			}
 
@@ -294,7 +294,7 @@ func main() {
 func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TLVDynamic, config Config, TimeTracker *TrackProcessingTime, SendCompleteCH chan interface{}) {
 	// Sleep for 3s after finishing sending and close trigger channel
 	defer func(config Config) {
-		if config.StayConnected {
+		if config.Generator.StayConnected {
 			return
 		} else {
 			time.Sleep(5 * time.Second)
@@ -316,29 +316,29 @@ func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TL
 	}
 
 	// For rate > 1000 SMS/sec send send messages each 2 ms
-	if config.SendRate > 1000 {
+	if config.Generator.SendRate > 1000 {
 		tick = 2 * time.Millisecond
-		blockSize = config.SendRate / 500
+		blockSize = config.Generator.SendRate / 500
 		tickInfoModule = 500
-	} else if config.SendRate > 100 {
+	} else if config.Generator.SendRate > 100 {
 		// For rate > 100 SMS/sec send send messages each 10 ms
 		tick = 10 * time.Millisecond
-		blockSize = config.SendRate / 100
+		blockSize = config.Generator.SendRate / 100
 		tickInfoModule = 100
-	} else if config.SendRate > 10 {
+	} else if config.Generator.SendRate > 10 {
 		// For rate > 10 SMS/sec AND <= 100 SMS/sec send messages each 100 ms
 		tick = 100 * time.Millisecond
-		blockSize = config.SendRate / 10
+		blockSize = config.Generator.SendRate / 10
 		tickInfoModule = 10
-	} else if config.SendRate > 1 {
+	} else if config.Generator.SendRate > 1 {
 		// For rate > 1 SMS/sec AND <= 10 SMS/sec send message each 500 ms
 		tick = 500 * time.Millisecond
-		blockSize = config.SendRate / 2
+		blockSize = config.Generator.SendRate / 2
 		tickInfoModule = 2
 	} else {
 		// Rate is 1 SMS/sec
 		tick = 1 * time.Second
-		blockSize = config.SendRate
+		blockSize = config.Generator.SendRate
 		tickInfoModule = 1
 	}
 
@@ -367,33 +367,33 @@ func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TL
 			// Skip current tick in case of overload
 			txQ, rxQ := s.GetTrackQueueSize()
 			var skipSend bool
-			if config.SendWindow > 0 {
-				if uint(txQ) >= config.SendWindow {
+			if config.Generator.SendWindow > 0 {
+				if uint(txQ) >= config.Generator.SendWindow {
 					skipSend = true
 				}
-				if tickBlock+uint(txQ) > config.SendWindow {
-					tickBlock = config.SendWindow - uint(txQ)
+				if tickBlock+uint(txQ) > config.Generator.SendWindow {
+					tickBlock = config.Generator.SendWindow - uint(txQ)
 				}
 			}
 
 			var i uint
 			if !skipSend {
-				for ; (i < tickBlock) && (done < config.SendCount); i++ {
+				for ; (i < tickBlock) && (done < config.Generator.SendCount); i++ {
 
 					// Dynamically generate message if:
 					// - TO is templated
 					// - There're TLV Dynamic fields
-					if config.Message.To.Template || (len(tlvDynamic) > 0) {
+					if config.Generator.Message.To.Template || (len(tlvDynamic) > 0) {
 						// Prepare new packet instance
 						pN := ps
 
 						// Process TO number template
-						if config.Message.To.Template {
+						if config.Generator.Message.To.Template {
 							randRunes := []rune("0123456789")
 
 							// Activate replacement only in case of template data
-							if cRnd := strings.Count(config.Message.To.Addr, "#"); cRnd > 0 {
-								da := config.Message.To.Addr
+							if cRnd := strings.Count(config.Generator.Message.To.Addr, "#"); cRnd > 0 {
+								da := config.Generator.Message.To.Addr
 								for ; cRnd > 0; cRnd-- {
 									da = strings.Replace(da, "#", string(randRunes[rand.Intn(len(randRunes))]), 1)
 								}
@@ -430,14 +430,14 @@ func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TL
 					done++
 				}
 			}
-			if done >= config.SendCount {
+			if done >= config.Generator.SendCount {
 				reportDiff := time.Since(firstInfoReport).Milliseconds()
 				var realRate int64
 				if reportDiff > 0 {
-					realRate = (int64(config.SendCount) * 1000) / reportDiff
+					realRate = (int64(config.Generator.SendCount) * 1000) / reportDiff
 				}
 
-				fmt.Println("#Finished sending", config.SendCount, "messages with expected rate:", config.SendRate, ", real rate:", realRate)
+				fmt.Println("#Finished sending", config.Generator.SendCount, "messages with expected rate:", config.Generator.SendRate, ", real rate:", realRate)
 				return
 			}
 

@@ -28,28 +28,30 @@ type Config struct {
 	ProfilerListen string `yaml:"profilerListen,omitempty"`
 
 	// Message generator configuration
-	Message struct {
-		From struct {
-			TON  int    `yaml:"ton"`
-			NPI  int    `yaml:"npi"`
-			Addr string `yaml:"addr"`
+	Generator struct {
+		Message struct {
+			From struct {
+				TON  int    `yaml:"ton"`
+				NPI  int    `yaml:"npi"`
+				Addr string `yaml:"addr"`
+			}
+			To struct {
+				TON      int    `yaml:"ton"`
+				NPI      int    `yaml:"npi"`
+				Addr     string `yaml:"addr"`
+				Template bool   `yaml:"template"`
+			}
+			RegisteredDelivery int      `yaml:"registeredDelivery"`
+			DataCoding         int      `yaml:"dataCoding"`
+			Body               string   `yaml:"body"`
+			TLV                []string `yaml:"tlv"`
 		}
-		To struct {
-			TON      int    `yaml:"ton"`
-			NPI      int    `yaml:"npi"`
-			Addr     string `yaml:"addr"`
-			Template bool   `yaml:"template"`
-		}
-		RegisteredDelivery int      `yaml:"registeredDelivery"`
-		DataCoding         int      `yaml:"dataCoding"`
-		Body               string   `yaml:"body"`
-		TLV                []string `yaml:"tlv"`
-	}
-	SendCount  uint `yaml:"count" envconfig:"SEND_COUNT"`
-	SendRate   uint `yaml:"rate" envconfig:"SEND_RATE"`
-	SendWindow uint `yaml:"window" envconfig:"SEND_WINDOW"`
+		SendCount  uint `yaml:"count" envconfig:"SEND_COUNT"`
+		SendRate   uint `yaml:"rate" envconfig:"SEND_RATE"`
+		SendWindow uint `yaml:"window" envconfig:"SEND_WINDOW"`
 
-	StayConnected bool `yaml:"stayConnected,omitempty"`
+		StayConnected bool `yaml:"stayConnected,omitempty"`
+	}
 }
 
 type Params struct {

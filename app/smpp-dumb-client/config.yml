@@ -21,7 +21,6 @@ profiler: yes
 # Profiler listening IP:port [ default is: 127.0.0.1:5800 ]
 profilerListen: 127.0.0.1:5800
 
-#
 # SMPP Configuration
 smpp:
   # Remote IP:port
@@ -37,38 +36,38 @@ smpp:
 
 #
 # Message generator configuration
-#generator:
-# Message submission parameters
-message:
-  from:
-    ton: 5
-    npi: 0
-    addr: ThisIsMe
-  to:
-    ton: 1
-    npi: 1
-    addr: 7903249####
-    template: yes   # Number  is template, "#" will be replaced by random [0..9] char
-  registeredDelivery: 1
-  dataCoding: 1
-  body: "This is message for sending"
-  tlv:
-# List of TLV fields, structure: CODE; TYPE; VALUE
-    - 0x1880; string; "App.Name.Rec"
-    - 0x1890; string; "Record Data"
-    #- 0x1900; hex; "0102030405"
-    # type "dynamic" : value is generated dynamically, using templates
-    - 0x1900; dynamic; "{timestamp}"
+generator:
+  # Message submission parameters
+  message:
+    from:
+      ton: 5
+      npi: 0
+      addr: ThisIsMe
+    to:
+      ton: 1
+      npi: 1
+      addr: 7903249####
+      template: yes   # Number  is template, "#" will be replaced by random [0..9] char
+    registeredDelivery: 1
+    dataCoding: 1
+    body: "This is message for sending"
+    tlv:
+  # List of TLV fields, structure: CODE; TYPE; VALUE
+      - 0x1880; string; "App.Name.Rec"
+      - 0x1890; string; "Record Data"
+      #- 0x1900; hex; "0102030405"
+      # type "dynamic" : value is generated dynamically, using templates
+      - 0x1900; dynamic; "{timestamp}"
 
-# Number of messages to send
-count: 100000000
-#count: 1
+  # Number of messages to send
+  count: 100000000
+  #count: 1
 
-# Submission rate
-rate: 100
+  # Submission rate
+  rate: 100
 
-# Submission TX window
-window: 2000
+  # Submission TX window
+  window: 2000
 
-# Should we stay connected after sending messages [ default: no ]
-stayConnected: yes
+  # Should we stay connected after sending messages [ default: no ]
+  stayConnected: yes

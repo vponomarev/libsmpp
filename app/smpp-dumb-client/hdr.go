@@ -24,6 +24,18 @@ type Config struct {
 		}
 	}
 
+	HTTP struct {
+		Incoming struct {
+			Listen  string `yaml:"listen"`
+			URL     string `yaml:"url"`
+			Enabled bool   `yaml:"enabled"`
+		}
+		Outgoing struct {
+			URL     string `yaml:"url"`
+			Enabled bool   `yaml:"enabled"`
+		}
+	}
+
 	Profiler       bool   `yaml:"profiler,omitempty"`
 	ProfilerListen string `yaml:"profilerListen,omitempty"`
 

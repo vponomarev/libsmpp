@@ -21,6 +21,17 @@ profiler: yes
 # Profiler listening IP:port [ default is: 127.0.0.1:5800 ]
 profilerListen: 127.0.0.1:5800
 
+# HTTP Configuration
+http:
+  incoming:
+    listen: 127.0.0.1:8075
+    url: "/message"
+    enabled: yes
+  outgoing:
+    url: "http://127.0.0.1:8076/pushMessage"
+    enabled: yes
+
+
 # SMPP Configuration
 smpp:
   # Remote IP:port

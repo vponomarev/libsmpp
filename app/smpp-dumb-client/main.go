@@ -78,9 +78,11 @@ func main() {
 			log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "StatusUpdate"}).Warning(x.GetDirection().String(), ",", x.GetTCPState().String(), ",", x.GetSMPPState().String(), ",", x.GetSMPPMode().String(), ",", x.Error(), ",", x.NError())
 			if x.GetSMPPState() == libsmpp.CSMPPBound {
 
-				// Start packet submission
-				log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "SendPacket", "count": config.Generator.SendCount, "rate": config.Generator.SendRate}).Info("Start message bulk message submission")
-				go PacketSender(s, params.submit, tlvDynamic, config, &TimeTracker, SendCompleteCH)
+				// Start packet submission IF enabled
+				if config.Generator.Enabled {
+					log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "SendPacket", "count": config.Generator.SendCount, "rate": config.Generator.SendRate}).Info("Start message bulk message submission")
+					go PacketSender(s, params.submit, tlvDynamic, config, &TimeTracker, SendCompleteCH)
+				}
 			}
 
 		case x := <-s.Inbox:

@@ -15,11 +15,10 @@ log:
   netbuf: true
 
 
-# Profiler configuration [ yes / no ]
-profiler: yes
-
-# Profiler listening IP:port [ default is: 127.0.0.1:5800 ]
-profilerListen: 127.0.0.1:5800
+# Profiler configuration
+profiler:
+  enabled: yes
+  listen: 127.0.0.1:5800
 
 # HTTP Configuration
 http:
@@ -48,6 +47,9 @@ smpp:
 #
 # Message generator configuration
 generator:
+  # Enable traffic generator
+  enabled: yes
+
   # Message submission parameters
   message:
     from:

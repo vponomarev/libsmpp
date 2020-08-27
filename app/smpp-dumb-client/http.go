@@ -19,11 +19,11 @@ type HttpHandler struct {
 
 func runProfiler(s *libsmpp.SMPPSession, config Config) {
 	// Init profiler if enabled
-	if config.Profiler {
-		if len(config.ProfilerListen) == 0 {
-			config.ProfilerListen = "127.0.0.1:5800"
+	if config.Profiler.Enabled {
+		if len(config.Profiler.Listen) == 0 {
+			config.Profiler.Listen = "127.0.0.1:5800"
 		}
-		log.WithFields(log.Fields{"type": "smpp-client", "action": "profiler"}).Info("Starting profiler at: ", config.ProfilerListen)
+		log.WithFields(log.Fields{"type": "smpp-client", "action": "profiler"}).Info("Starting profiler at: ", config.Profiler.Listen)
 
 		hh := &HttpHandler{s: s, config: &config, sl: &statsLog}
 		http.HandleFunc("/", hh.StatsRoot)
@@ -36,7 +36,7 @@ func runProfiler(s *libsmpp.SMPPSession, config Config) {
 				log.WithFields(log.Fields{"type": "smpp-client", "action": "profiler"}).Fatal("ListenAndServe returned an error: ", err)
 				return
 			}
-		}(config.ProfilerListen)
+		}(config.Profiler.Listen)
 	}
 }
 
@@ -89,5 +89,5 @@ func (h *HttpHandler) StatPage(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "IO Read error: ", err)
 		return
 	}
-	fmt.Fprintln(w, strings.ReplaceAll(string(data), "{HostIP}", h.config.ProfilerListen))
+	fmt.Fprintln(w, strings.ReplaceAll(string(data), "{HostIP}", h.config.Profiler.Listen))
 }

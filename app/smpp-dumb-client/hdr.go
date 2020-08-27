@@ -36,11 +36,14 @@ type Config struct {
 		}
 	}
 
-	Profiler       bool   `yaml:"profiler,omitempty"`
-	ProfilerListen string `yaml:"profilerListen,omitempty"`
+	Profiler struct {
+		Enabled bool   `yaml:"enabled"`
+		Listen  string `yaml:"listen,omitempty"`
+	}
 
 	// Message generator configuration
 	Generator struct {
+		Enabled bool `yaml:"enabled"`
 		Message struct {
 			From struct {
 				TON  int    `yaml:"ton"`

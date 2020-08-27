@@ -380,7 +380,7 @@ func sessionProcessor(s *libsmpp.SMPPSession, config *Config, lConfig *LConfig) 
 					sn := *msgID
 					if sn > sv {
 						tx, rx := s.GetTrackQueueSize()
-						fmt.Println("[", s.SessionID, "] During last 1s: ", (sn - sv), " [MAX:", sn, "][TX:", tx, "][RX:", rx, "]")
+						fmt.Println("[", s.SessionID, "] During last 1s: ", sn-sv, " [MAX:", sn, "][TX:", tx, "][RX:", rx, "]")
 						sv = sn
 					} else {
 						fmt.Println("[", s.SessionID, "] During last 1s: -")

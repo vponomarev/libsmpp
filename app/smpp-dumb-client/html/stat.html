@@ -68,7 +68,7 @@
     // Initial data population
     ShowInfo("Preparing for data load ...");
     $.get("/getInfo", function(data) {
-        console.log(data)
+        console.log(data);
         if (Array.isArray(data)) {
             gData1 = [];
             gData2 = [];
@@ -77,20 +77,20 @@
                 // Need to add extra data at the beginning of array
                 let MinDate = data[0].UT;
                 let cnt = MAX_DATA_REC_COUNT - data.length + 1;
-                console.log("# Adding trailing ", cnt, "recs")
+                console.log("# Adding trailing ", cnt, "recs");
                 for (i=1; i < cnt; i++) {
-                    gData1.unshift([(MinDate - i) * 1000, 0])
-                    gData2.unshift([(MinDate - i) * 1000, 0])
+                    gData1.unshift([(MinDate - i) * 1000, 0]);
+                    gData2.unshift([(MinDate - i) * 1000, 0]);
                     gData3.unshift([(MinDate - i) * 1000, 0])
                 }
             }
             data.forEach(function(item){
-                gData1.push([item.UT * 1000, item.SentRate])
-                gData2.push([item.UT * 1000, item.RecvRate])
+                gData1.push([item.UT * 1000, item.SentRate]);
+                gData2.push([item.UT * 1000, item.RecvRate]);
                 gData3.push([item.UT * 1000, item.SentRTD])
             });
-            ShowInfo("Data ready, loading chart")
-            console.log("Resulting items: ", gData1, gData2, gData3)
+            ShowInfo("Data ready, loading chart");
+            console.log("Resulting items: ", gData1, gData2, gData3);
             doLoadChart(gData1, gData2, gData3)
         } else {
             ShowInfo("Incorrect answer from backend")
@@ -109,33 +109,33 @@
                 animation: Highcharts.svg,
                 events: {
                     load: function () {
-                        console.log('Chart onLoad() event')
+                        console.log('Chart onLoad() event');
                         var series = this.series[0];
-                        var lastT = 512
+                        var lastT = 512;
                         const getData = function (chart, lastT) {
-                            console.log("call getData() ... [ lastT = ", lastT, "]")
+                            console.log("call getData() ... [ lastT = ", lastT, "]");
                             $.get("/getInfo", function (data) {
                                 if (Array.isArray(data)) {
                                     // Search for last time period
                                     data.forEach(function (item) {
                                         // console.log('Adding point: ', item.UT, ' = ', item.SentRate)
                                         if (item.UT >= lastT) {
-                                            chart.series[0].addPoint([item.UT * 1000, item.SentRate], false, false)
-                                            chart.series[1].addPoint([item.UT * 1000, item.RecvRate], false, false)
-                                            chart.series[2].addPoint([item.UT * 1000, item.SentRTD], false, false)
+                                            chart.series[0].addPoint([item.UT * 1000, item.SentRate], false, false);
+                                            chart.series[1].addPoint([item.UT * 1000, item.RecvRate], false, false);
+                                            chart.series[2].addPoint([item.UT * 1000, item.SentRTD], false, false);
                                             lastT = item.UT
                                         }
                                         // series.addPoint([item.UT * 1000, item.SentRate], false, true)
                                     })
                                 }
-                                ShowInfo("Load complete at: ", Date())
+                                ShowInfo("Load complete at: ", Date());
                                 chart.redraw();
                                 setTimeout(getData, 5000, chart, lastT)
                             }).fail(function() {
                                 ShowInfo("Error periodical page load, try to resolve ...");
                                 setTimeout(getData, 5000, chart, lastT)
                             })
-                        }
+                        };
                         getData(this, lastT);
                     }
                 }

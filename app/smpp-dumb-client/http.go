@@ -91,3 +91,38 @@ func (h *HttpHandler) StatPage(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintln(w, strings.ReplaceAll(string(data), "{HostIP}", h.config.Profiler.Listen))
 }
+
+// ======================================================================== //
+// HTTP Request processor                                                   //
+// ======================================================================== //
+
+func runListener(s *libsmpp.SMPPSession, config Config) {
+	// Init profiler if enabled
+	if config.HTTP.Incoming.Enabled {
+		if len(config.HTTP.Incoming.Listen) == 0 {
+			config.HTTP.Incoming.Listen = "127.0.0.1:5801"
+		}
+		log.WithFields(log.Fields{"type": "smpp-client", "action": "HTTP-Incoming"}).Info("Starting HTTP Listener at: ", config.HTTP.Incoming.Listen, config.HTTP.Incoming.URL)
+
+		hh := &HttpHandler{s: s, config: &config, sl: &statsLog}
+
+		mux := http.NewServeMux()
+		mux.HandleFunc(config.HTTP.Incoming.URL, hh.ProcessIncomingRequest)
+
+		err := http.ListenAndServe(config.HTTP.Incoming.Listen, mux)
+		if err != nil {
+			log.WithFields(log.Fields{"type": "smpp-client", "action": "HTTP-Incoming"}).Fatal("ListenAndServe returned an error: ", err)
+			return
+		}
+	}
+}
+
+func (h *HttpHandler) ProcessIncomingRequest(w http.ResponseWriter, r *http.Request) {
+	if r.ParseForm() != nil {
+		fmt.Fprintln(w, "Error parsing request")
+		return
+	}
+
+	s := libsmpp.SMPPSubmit{}
+	fmt.Fprint(w, s)
+}

@@ -83,6 +83,11 @@ func main() {
 					log.WithFields(log.Fields{"type": "smpp-client", "SID": s.SessionID, "service": "outConnect", "action": "SendPacket", "count": config.Generator.SendCount, "rate": config.Generator.SendRate}).Info("Start message bulk message submission")
 					go PacketSender(s, params.submit, tlvDynamic, config, &TimeTracker, SendCompleteCH)
 				}
+
+				// Start HTTP Incoming request listener IF enabled
+				if config.HTTP.Incoming.Enabled {
+					go runListener(s, config)
+				}
 			}
 
 		case x := <-s.Inbox:

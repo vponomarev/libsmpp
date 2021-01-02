@@ -73,8 +73,8 @@ generator:
       - 0x1900; dynamic; "{timestamp}"
 
   # Number of messages to send
-  count: 100000000
-  #count: 1
+  #count: 100000000
+  count: 0
 
   # Submission rate
   rate: 100

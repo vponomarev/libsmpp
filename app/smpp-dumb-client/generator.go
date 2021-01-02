@@ -99,7 +99,7 @@ func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TL
 	}(config)
 
 	var tick time.Duration
-	var tickCouter uint
+	var tickCounter uint
 	var tickInfoModule uint
 	var blockSize uint
 	var msgLastSec uint
@@ -146,16 +146,16 @@ func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TL
 		select {
 		case <-c:
 			// First tick
-			if tickCouter == 0 {
+			if tickCounter == 0 {
 				lastInfoReport = time.Now()
 				firstInfoReport = time.Now()
 
 				// Don't sent anything during first tick
-				tickCouter++
+				tickCounter++
 				continue
 			}
 
-			tickCouter++
+			tickCounter++
 
 			// Init block size for current tick
 			tickBlock := blockSize
@@ -178,7 +178,7 @@ func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TL
 
 					// Dynamically generate message if:
 					// - TO is templated
-					// - There're TLV Dynamic fields
+					// - There are TLV Dynamic fields
 					if config.Generator.Message.To.Template || (len(tlvDynamic) > 0) {
 						// Prepare new packet instance
 						pN := ps
@@ -237,7 +237,7 @@ func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TL
 				return
 			}
 
-			if tickCouter%tickInfoModule == 0 {
+			if tickCounter%tickInfoModule == 0 {
 				TimeTracker.Lock()
 				tCnt := TimeTracker.Count
 				tDur := TimeTracker.DelayTotal
@@ -257,7 +257,7 @@ func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TL
 					reportDiff = 1
 				}
 				lastInfoReport = time.Now()
-				fmt.Println("[", s.SessionID, "] During last", reportDiff, "ms:", int64(msgLastSec)*1000/reportDiff, "[MAX:", done, "][TX:", txQ, "][RX:", rxQ, "][RTDavg micros: ", tAvg, ",", tCnt, "]")
+				fmt.Println("[", s.SessionID, "] During last", reportDiff, "ms:", int64(msgLastSec)*1000/reportDiff, "[MAX:", done, "][TX:", txQ, "][RX:", rxQ, "][RTD avg micros: ", tAvg, ",", tCnt, "]")
 				statsLog.Update(lastInfoReport, StatCounter{{ID: "SentRate", Value: uint32(int64(msgLastSec) * 1000 / reportDiff)}, {ID: "SentCount", Value: uint32(done)}, {ID: "SentRTD", Value: uint32(tAvg / 1000)}})
 
 				msgLastSec = 0

@@ -14,10 +14,13 @@ import (
 
 // List of TLV preservation for Delivery Reports
 var tlvDynamic []TLVDynamic
+var (
+	configFileName = flag.String("-config", "config.yml", "Override configuration file name")
+)
 
 func main() {
 	// Load config file name
-	configFileName := flag.String("-config", "config.yml", "Override configuration file name")
+	flag.Parse()
 
 	log.SetOutput(os.Stdout)
 	log.SetLevel(log.InfoLevel)

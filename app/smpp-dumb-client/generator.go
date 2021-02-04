@@ -27,6 +27,7 @@ func prepareSubmit(config Config) (oP libsmpp.SMPPSubmit, err error) {
 			Addr: config.Generator.Message.To.Addr,
 		},
 		ShortMessages:      config.Generator.Message.Body,
+		ValidityPeriod:     config.Generator.Message.ValidityPeriod,
 		RegisteredDelivery: uint8(config.Generator.Message.RegisteredDelivery),
 		TLV:                map[libsmpp.TLVCode]libsmpp.TLVStruct{},
 	}

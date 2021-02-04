@@ -62,6 +62,8 @@ generator:
       addr: 7903249####
       template: yes   # Number  is template, "#" will be replaced by random [0..9] char
     registeredDelivery: 1
+    # Validity period in SMPP format, will be passed exactly into packet [ "000000000100000R" means "1 minute" ]
+    validityPeriod: "000000000100000R"
     dataCoding: 1
     body: "This is message for sending"
     tlv:

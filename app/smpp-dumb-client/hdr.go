@@ -57,6 +57,7 @@ type Config struct {
 				Template bool   `yaml:"template"`
 			}
 			RegisteredDelivery int      `yaml:"registeredDelivery"`
+			ValidityPeriod     string   `yaml:"validityPeriod"`
 			DataCoding         int      `yaml:"dataCoding"`
 			Body               string   `yaml:"body"`
 			TLV                []string `yaml:"tlv"`

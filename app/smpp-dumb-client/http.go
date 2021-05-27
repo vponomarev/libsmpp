@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/vponomarev/libsmpp"
@@ -15,6 +16,36 @@ type HttpHandler struct {
 	s      *libsmpp.SMPPSession
 	config *Config
 	sl     *StatsLog
+}
+
+type JTLV struct {
+	ID          int32
+	IsBase64    bool
+	Value       string
+	ValueBase64 []byte
+}
+
+type JSubmitRequest struct {
+	From struct {
+		TON  int    `json:"ton"`
+		NPI  int    `json:"npi"`
+		Addr string `json:"addr"`
+	}
+	To struct {
+		TON  int    `json:"ton"`
+		NPI  int    `json:"npi"`
+		Addr string `json:"addr"`
+	}
+	RegisteredDelivery int    `json:"registeredDelivery"`
+	DataCoding         int    `json:"dataCoding"`
+	Body               string `json:"body"`
+	TLV                []JTLV `json:"tlv"`
+}
+
+type JErrorResponse struct {
+	Status    int
+	ErrorCode int
+	ErrorText string
 }
 
 func runProfiler(s *libsmpp.SMPPSession, config Config) {
@@ -123,6 +154,24 @@ func (h *HttpHandler) ProcessIncomingRequest(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	s := libsmpp.SMPPSubmit{}
-	fmt.Fprint(w, s)
+	if h.config.DebugFeatures.HTTPIncoming {
+		line := "{\"From\":{\"ton\":5, \"npi\": 0, \"addr\": \"79031234567\"}, \"TLV\":[{\"ID\": 12345, \"Value\":\"Message text\", \"ValueBase64\":\"VGVzdCBtZXNzYWdlCg==\"}]}"
+		var jr JSubmitRequest
+
+		if err := json.Unmarshal([]byte(line), &jr); err != nil {
+			er := JErrorResponse{
+				Status:    0,
+				ErrorCode: 0,
+				ErrorText: err.Error(),
+			}
+			if es, err := json.Marshal(er); err != nil {
+				fmt.Fprint(w, "Error generating JSON Result: ", err)
+			} else {
+				fmt.Fprint(w, string(es))
+			}
+			return
+		}
+
+		fmt.Fprint(w, jr)
+	}
 }

@@ -8,6 +8,9 @@ import (
 )
 
 type Config struct {
+	DebugFeatures struct {
+		HTTPIncoming bool `yaml:"httpincoming"`
+	}
 	Log struct {
 		Level  string `yaml:"level,omitempty"`
 		Rate   bool

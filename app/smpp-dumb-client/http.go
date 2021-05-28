@@ -173,5 +173,39 @@ func (h *HttpHandler) ProcessIncomingRequest(w http.ResponseWriter, r *http.Requ
 		}
 
 		fmt.Fprint(w, jr)
+
+		sSubmit := libsmpp.SMPPSubmit{
+			ServiceType: "",
+			Source: libsmpp.SMPPAddress{
+				TON:  uint8(jr.From.TON),
+				NPI:  uint8(jr.From.NPI),
+				Addr: jr.From.Addr,
+			},
+			Dest: libsmpp.SMPPAddress{
+				TON:  uint8(jr.To.TON),
+				NPI:  uint8(jr.To.NPI),
+				Addr: jr.To.Addr,
+			},
+			ESMClass:              0,
+			ProtocolID:            0,
+			PriorityFlag:          0,
+			ScheduledDeliveryTime: "",
+			ValidityPeriod:        "",
+			RegisteredDelivery:    0,
+			ReplaceIfPresent:      0,
+			DataCoding:            0,
+			SmDefaultMsgID:        0,
+			SmLength:              0,
+			ShortMessages:         jr.Body,
+			TLV:                   nil,
+		}
+		h.s.EncodeSubmitSm(sSubmit)
+		var rErr error
+		p, rErr := h.s.EncodeSubmitSm(sSubmit)
+		if rErr != nil {
+			fmt.Fprint(w, "Error encoding packet body:", rErr)
+			return
+		}
+		h.s.Outbox <- p
 	}
 }

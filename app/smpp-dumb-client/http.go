@@ -199,13 +199,14 @@ func (h *HttpHandler) ProcessIncomingRequest(w http.ResponseWriter, r *http.Requ
 			ShortMessages:         jr.Body,
 			TLV:                   nil,
 		}
-		h.s.EncodeSubmitSm(sSubmit)
+
 		var rErr error
 		p, rErr := h.s.EncodeSubmitSm(sSubmit)
 		if rErr != nil {
 			fmt.Fprint(w, "Error encoding packet body:", rErr)
 			return
 		}
+		p.UplinkTransactionID = transactionTrack.getNextID()
 		h.s.Outbox <- p
 	}
 }

@@ -92,3 +92,16 @@ type TLVDynamic struct {
 	ID       libsmpp.TLVCode
 	Template string
 }
+
+type TransactionTracker struct {
+	SeqNumber uint32
+	sync.RWMutex
+}
+
+func (t *TransactionTracker) getNextID() (result uint32) {
+	t.RLock()
+	defer t.RUnlock()
+
+	t.SeqNumber++
+	return t.SeqNumber
+}

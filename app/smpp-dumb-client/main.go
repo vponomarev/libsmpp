@@ -15,7 +15,8 @@ import (
 // List of TLV preservation for Delivery Reports
 var tlvDynamic []TLVDynamic
 var (
-	configFileName = flag.String("config", "config.yml", "Override configuration file name")
+	configFileName   = flag.String("config", "config.yml", "Override configuration file name")
+	transactionTrack = TransactionTracker{}
 )
 
 func main() {

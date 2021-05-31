@@ -221,6 +221,7 @@ func PacketSender(s *libsmpp.SMPPSession, ps libsmpp.SMPPSubmit, tlvDynamic []TL
 
 					}
 					p.CreateTime = time.Now()
+					p.UplinkTransactionID = transactionTrack.getNextID()
 
 					s.Outbox <- p
 					msgLastSec++

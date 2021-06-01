@@ -732,7 +732,6 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 
 			// Process message and mark if this is duplicated response
 			px.IsDuplicate = s.winTrackEvent(CDirIncoming, px)
-			// px.UplinkTransactionID = p.UplinkTransactionID
 
 			s.InboxR <- *px
 
@@ -748,6 +747,19 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 			log.WithFields(log.Fields{"type": "smpp", "SID": s.SessionID, "service": "EnquireSender", "seq": seq}).Debug("Confirmed")
 
 		default:
+		}
+	}
+}
+
+func (s *SMPPSession) SyncBindWait() (res bool, err error) {
+	for {
+		select {
+		case x := <-s.Status:
+			if x.GetSMPPState() == CSMPPBound {
+				return true, nil
+			}
+		case <-s.Closed:
+			return false, nil
 		}
 	}
 }

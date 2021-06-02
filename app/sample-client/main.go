@@ -9,8 +9,8 @@ import (
 
 func main() {
 	// Connection params
-	remoteIP := net.ParseIP("172.21.211.199")
-	remotePort := 2775
+	remoteIP := net.ParseIP("127.0.0.1")
+	remotePort := 2500
 
 	// Init SMPP Session
 	s := &libsmpp.SMPPSession{
@@ -29,9 +29,9 @@ func main() {
 
 	go s.RunOutgoing(conn, libsmpp.SMPPBind{
 		ConnMode:   libsmpp.CSMPPTRX,
-		SystemID:   "Test",
-		Password:   "Test",
-		SystemType: "",
+		SystemID:   "test",
+		Password:   "test",
+		SystemType: "test",
 		IVersion:   0x34,
 	},
 		1)

@@ -18,7 +18,7 @@ func main() {
 	}
 	s.Init()
 
-	fmt.Print("Connecting to ", remoteIP, remotePort)
+	fmt.Println("Connecting to: ", remoteIP, remotePort)
 
 	dest := &net.TCPAddr{IP: remoteIP, Port: remotePort}
 	conn, err := net.DialTCP("tcp", nil, dest)
@@ -38,5 +38,12 @@ func main() {
 
 	state, err := s.SyncBindWait()
 	fmt.Println("Bind state: ", state, err)
+
+	if state == false {
+		fmt.Println("Unsuccessfull connect, terminating")
+		return
+	}
+
+	// TODO: Implement sync message sending
 
 }

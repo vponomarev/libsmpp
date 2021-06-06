@@ -751,6 +751,7 @@ func (s *SMPPSession) Run(conn *net.TCPConn, cd ConnDirection, cb SMPPBind, id u
 	}
 }
 
+// SYNC: Wait for BIND Resp
 func (s *SMPPSession) SyncBindWait() (res bool, err error) {
 	for {
 		select {
@@ -758,6 +759,22 @@ func (s *SMPPSession) SyncBindWait() (res bool, err error) {
 			if x.GetSMPPState() == CSMPPBound {
 				return true, nil
 			}
+		case <-s.Closed:
+			return false, nil
+		}
+	}
+}
+
+// SYNC: Helper function for SYNC operations
+func (s *SMPPSession) SyncHelper() (res bool, err error) {
+	for {
+		select {
+		case x := <-s.Status:
+			// Status updates
+			// TODO
+		case x := <-s.InboxR:
+			// Incoming RESP packets
+			// TODO
 		case <-s.Closed:
 			return false, nil
 		}

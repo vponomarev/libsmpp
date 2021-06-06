@@ -39,7 +39,7 @@ func main() {
 	state, err := s.SyncBindWait()
 	fmt.Println("Bind state: ", state, err)
 
-	if state == false {
+	if !state {
 		fmt.Println("Unsuccessfull connect, terminating")
 		return
 	}

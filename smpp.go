@@ -772,9 +772,15 @@ func (s *SMPPSession) SyncHelper() (res bool, err error) {
 		case x := <-s.Status:
 			// Status updates
 			// TODO
+			if x.Error() != nil {
+
+			}
 		case x := <-s.InboxR:
 			// Incoming RESP packets
 			// TODO
+			if x.IsReply {
+
+			}
 		case <-s.Closed:
 			return false, nil
 		}
